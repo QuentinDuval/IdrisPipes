@@ -1,0 +1,8 @@
+package pipes
+
+sourcedir = src
+
+modules = Pipes
+        , Test.Pipes
+
+tests = Test.Pipes.run_tests

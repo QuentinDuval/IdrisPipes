@@ -1,0 +1,2 @@
+language: nix
+script: nix-shell -A IdrisReducers --command "bash rebuild.sh && bash test.sh"
