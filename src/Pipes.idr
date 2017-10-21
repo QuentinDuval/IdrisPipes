@@ -3,12 +3,10 @@ module Pipes
 -- import Control.Category
 import Control.Monad.Trans
 
--- TODO: Action makes the instance of Functor not total (not strictly positive)
--- TODO: Try `Inf` or `codata`
-
 {-
 Main data type for Pipes:
-*
+* not really a `codata`, does not really need `Inf`
+* but most function will need `assert_total`
 -}
 data Pipe : (a, b : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
   Pure    : r -> Pipe a b m r                     -- Lift a value into the pipe
@@ -42,36 +40,39 @@ Pipeline m r = Pipe Void Void m r
 -- * Recursively replace `r` with `f r`
 
 implementation (Monad m) => Functor (Pipe a b m) where
-  map f (Pure r) = Pure (f r)
-  map f (Action a) = Action (a >>= pure . map f)
-  map f (Yield b next) = Yield b (map f next)
-  map f (Await cont) = Await (map f . cont)
+  map f p = assert_total $ case p of
+    Pure r => Pure (f r)
+    Action a => Action (a >>= pure . map f)
+    Yield b next => Yield b (map f next)
+    Await cont => Await (map f . cont)
 
 -- Applicative implementation
 -- * Recursively replace `r` with `map r pa`
 
 implementation (Monad m) => Applicative (Pipe a b m) where
   pure = Pure
-  (Pure f) <*> pa = map f pa
-  (Action a) <*> pa = Action (a >>= pure . (<*> pa))
-  (Yield b next) <*> pa = Yield b (next <*> pa)
-  (Await cont) <*> pa = Await (\a => cont a <*> pa)
+  pf <*> pa = assert_total $ case pf of
+    Pure f => map f pa
+    Action a => Action (a >>= pure . (<*> pa))
+    Yield b next => Yield b (next <*> pa)
+    Await cont => Await (\a => cont a <*> pa)
 
 -- Monad implementation
 -- * Recursively replace `r` with `f r`
 
 implementation (Monad m) => Monad (Pipe a b m) where
-  (Pure r) >>= f = f r
-  (Action a) >>= f = Action (a >>= pure . (>>= f))
-  (Yield b next) >>= f = Yield b (next >>= f)
-  (Await cont) >>= f = Await (\a => cont a >>= f)
+  m >>= f = assert_total $ case m of
+    Pure r => f r
+    Action a => Action (a >>= pure . (>>= f))
+    Yield b next => Yield b (next >>= f)
+    Await cont => Await (\a => cont a >>= f)
 
 -- Monad Transformer implementation
 -- * Wrap the monadic action in a `Action` constructor
 -- * Wrap the monadic return in a `Pure` constructor
 
 implementation MonadTrans (Pipe a b) where
-  lift m = Action (m >>= pure . Pure)
+  lift m = assert_total $ Action (m >>= pure . Pure)
 
 -- Assembling pipes (forms a Category)
 -- * Recursively defined to iterate the action of the pipe
