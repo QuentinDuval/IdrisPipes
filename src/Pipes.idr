@@ -31,6 +31,10 @@ Consumer a m r = Pipe a Void m r
 Source : (b: Type) -> (m: Type -> Type) -> (r: Type) -> Type
 Source b m r = Pipe Void b m r
 
+-- Pipeline cannot `await` or `yield`
+Pipeline : (m: Type -> Type) -> (r: Type) -> Type
+Pipeline m r = Pipe Void Void m r
+
 -- Functor implementation:
 -- * Recursively replace `r` with `f r`
 
@@ -72,8 +76,15 @@ implementation MonadTrans (Pipe a b) where
 -- Assembling pipes
 -- * TODO
 
--- Running a pipe
--- * TODO
+-- Running a pipeline
+-- * Execute the sequence of effects of the pipe
+-- * Return the final value when no effects are remaining
+
+runPipe : (Monad m) => Pipeline m r -> m r
+runPipe (Pure r) = pure r           -- Done executing the pipe, return the result
+runPipe (Action a) = a >>= runPipe  -- Execute the action, run the next of the pipe
+runPipe (Yield b next) = absurd b                         -- Cannot happen
+runPipe (Await cont) = runPipe (Await (\v => absurd v))   -- Cannot happen
 
 -- Helper functions to construct pipes more easily
 -- * `mapping` lifts a function as a pipe transformation
