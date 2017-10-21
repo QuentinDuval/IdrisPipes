@@ -6,3 +6,5 @@ modules = Pipes
         , Test.Pipes
 
 tests = Test.Pipes.run_tests
+
+-- opts = "--typeintype --warnpartial"

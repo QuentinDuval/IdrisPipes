@@ -3,6 +3,7 @@ module Pipes
 -- import Control.Category
 import Control.Monad.Trans
 
+-- TODO: Action makes the instance of Functor not total (not strictly positive)
 
 {-
 Main data type for Pipes:
