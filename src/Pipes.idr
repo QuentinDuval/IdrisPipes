@@ -1,5 +1,6 @@
 module Pipes
 
+-- import Control.Category
 import Control.Monad.Trans
 
 
@@ -73,8 +74,20 @@ implementation (Monad m) => Monad (Pipe a b m) where
 implementation MonadTrans (Pipe a b) where
   lift m = Action (m >>= pure . Pure)
 
--- Assembling pipes
--- * TODO
+-- Assembling pipes (forms a Category)
+-- * Recursively defined to iterate the action of the pipe
+
+infixl 9 .|
+
+(.|) : (Monad m) => Pipe a b m r -> Pipe b c m r -> Pipe a c m r
+(.|) = fuse where
+  fuse (Pure r1) _ = Pure r1                                -- Termination of pipeline
+  fuse _ (Pure r2) = Pure r2                                -- Termination of pipeline
+  fuse (Yield b next) (Await cont) = next .| cont b         -- Connect yield to await
+  fuse up (Yield c next) = Yield c (up .| next)             -- Yielding downstream
+  fuse (Await cont) down = Await (\a => cont a .| down)     -- Awaiting upstream
+  fuse (Action a) down = lift a >>= \next => next .| down   -- Produce effect upstream
+  fuse up (Action a) = lift a >>= \next => up .| next       -- Produce effect downstream
 
 -- Running a pipeline
 -- * Execute the sequence of effects of the pipe
@@ -97,10 +110,12 @@ mapping f = recur where
     yield (f a)
     recur
 
-filtering : (Monad m) => (a -> Bool) -> Pipe a a m ()
+filtering : (Monad m) => (a -> Bool) -> Pipe a a m r
 filtering p = recur where
   recur = do
     a <- await
-    if p a then yield a else recur
+    if p a
+      then yield a *> recur
+      else recur
 
 --
