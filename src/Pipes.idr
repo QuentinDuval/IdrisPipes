@@ -69,7 +69,27 @@ implementation (Monad m) => Monad (Pipe a b m) where
 implementation MonadTrans (Pipe a b) where
   lift m = Action (m >>= pure . Pure)
 
+-- Assembling pipes
+-- * TODO
 
+-- Running a pipe
+-- * TODO
 
+-- Helper functions to construct pipes more easily
+-- * `mapping` lifts a function as a pipe transformation
+-- * `filtering` lifts a predicate into a pipe filter
+
+mapping : (Monad m) => (a -> b) -> Pipe a b m r
+mapping f = recur where
+  recur = do
+    a <- await
+    yield (f a)
+    recur
+
+filtering : (Monad m) => (a -> Bool) -> Pipe a a m ()
+filtering p = recur where
+  recur = do
+    a <- await
+    if p a then yield a else recur
 
 --
