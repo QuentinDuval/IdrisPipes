@@ -1,5 +1,7 @@
 module Pipes
 
+import Control.Monad.Trans
+
 
 {-
 Main data type for Pipes:
@@ -10,6 +12,16 @@ data Pipe : (a, b : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
   Action  : m (Pipe a b m r) -> Pipe a b m r      -- Wrap a monadic action
   Yield   : b -> Pipe a b m r -> Pipe a b m r     -- Yield a value and next status
   Await   : (a -> Pipe a b m r) -> Pipe a b m r   -- Yield a continuation (expecting a value)
+
+-- Public operations inside a coroutine
+-- * `yield` sends a value downstream
+-- * `await` waits from an upstream value
+
+yield : b -> Pipe a b m ()
+yield b = Yield b (Pure ())
+
+await : Pipe a b m a
+await = Await Pure
 
 -- Consumer cannot `yield` anything
 Consumer : (a: Type) -> (m: Type -> Type) -> (r: Type) -> Type
@@ -49,5 +61,15 @@ implementation (Monad m) => Monad (Pipe a b m) where
     recur (Action a) = Action (a >>= \p => pure (recur p))
     recur (Yield b next) = Yield b (recur next)
     recur (Await cont) = Await (\a => recur (cont a))
+
+-- Monad Transformer implementation
+-- * Wrap the monadic action in a `Action` constructor
+-- * Wrap the monadic return in a `Pure` constructor
+
+implementation MonadTrans (Pipe a b) where
+  lift m = Action (m >>= pure . Pure)
+
+
+
 
 --
