@@ -40,11 +40,11 @@ Pipeline m r = Pipe Void Void m r
 -- * Recursively replace `r` with `f r`
 
 implementation (Monad m) => Functor (Pipe a b m) where
-  map f p = recur p where
+  map f = recur where
     recur (Pure r) = Pure (f r)
-    recur (Action a) = Action (a >>= \p => pure (recur p))
+    recur (Action a) = Action (a >>= pure . recur)
     recur (Yield b next) = Yield b (recur next)
-    recur (Await cont) = Await (\a => recur (cont a))
+    recur (Await cont) = Await (recur . cont)
 
 -- Applicative implementation
 -- * Recursively replace `r` with `map r pa`
@@ -53,9 +53,9 @@ implementation (Monad m) => Applicative (Pipe a b m) where
   pure = Pure
   pf <*> pa = recur pf where
     recur (Pure f) = map f pa
-    recur (Action a) = Action (a >>= \p => pure (recur p))
+    recur (Action a) = Action (a >>= pure . recur)
     recur (Yield b next) = Yield b (recur next)
-    recur (Await cont) = Await (\a => recur (cont a))
+    recur (Await cont) = Await (recur . cont)
 
 -- Monad implementation
 -- * Recursively replace `r` with `f r`
@@ -63,9 +63,9 @@ implementation (Monad m) => Applicative (Pipe a b m) where
 implementation (Monad m) => Monad (Pipe a b m) where
   m >>= f = recur m where
     recur (Pure r) = f r
-    recur (Action a) = Action (a >>= \p => pure (recur p))
+    recur (Action a) = Action (a >>= pure . recur)
     recur (Yield b next) = Yield b (recur next)
-    recur (Await cont) = Await (\a => recur (cont a))
+    recur (Await cont) = Await (recur . cont)
 
 -- Monad Transformer implementation
 -- * Wrap the monadic action in a `Action` constructor
