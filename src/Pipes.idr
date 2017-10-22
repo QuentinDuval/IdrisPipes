@@ -26,17 +26,17 @@ yield b = Yield b (Pure ())
 await : Pipe a b m a
 await = Await Pure
 
--- Consumer cannot `yield` anything
-Consumer : (a: Type) -> (m: Type -> Type) -> (r: Type) -> Type
-Consumer a m r = Pipe a Void m r
-
 -- Source cannot `await` any input
 Source : (b: Type) -> (m: Type -> Type) -> (r: Type) -> Type
 Source b m r = Pipe Void b m r
 
--- Pipeline cannot `await` or `yield`
-Pipeline : (m: Type -> Type) -> (r: Type) -> Type
-Pipeline m r = Pipe Void Void m r
+-- Sink cannot `yield` anything
+Sink : (a: Type) -> (m: Type -> Type) -> (r: Type) -> Type
+Sink a m r = Pipe a Void m r
+
+-- Effect cannot `await` or `yield` (pure effect)
+Effect : (m: Type -> Type) -> (r: Type) -> Type
+Effect m r = Pipe Void Void m r
 
 -- Functor implementation:
 -- * Recursively replace `r` with `f r`
@@ -105,12 +105,11 @@ mutual
 (.|) : (Monad m) => Pipe a b m r -> Pipe b c m r -> Pipe a c m r
 (.|) = (~>)
 
-
--- Running a pipeline
+-- Running a Effect
 -- * Execute the sequence of effects of the pipe
 -- * Return the final value when no effects are remaining
 
-runPipe : (Monad m) => Pipeline m r -> m r
+runPipe : (Monad m) => Effect m r -> m r
 runPipe (Pure r) = pure r           -- Done executing the pipe, return the result
 runPipe (Action a) = a >>= runPipe  -- Execute the action, run the next of the pipe
 runPipe (Yield b next) = absurd b                         -- Cannot happen
@@ -130,9 +129,8 @@ consume f = recur where
 -- * `mapping` lifts a function as a pipe transformation
 -- * `filtering` lifts a predicate into a pipe filter
 
-source : (Monad m) => List a -> Source a m ()
-source [] = pure ()
-source (x::xs) = yield x *> source xs
+each : (Monad m, Foldable f) => f a -> Source a m ()
+each xs = foldr (\x, p => yield x *> p) (pure ()) xs
 
 mapping : (Monad m) => (a -> b) -> Pipe a b m r
 mapping f = recur where
