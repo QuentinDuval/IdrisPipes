@@ -35,6 +35,12 @@ mappingM f = recur where
     yield b
     recur
 
+concatMapping : (Monad m, Foldable f) => Pipe (f a) a m r
+concatMapping = do
+  xs <- await
+  foldr (\x, p => yield x *> p) (pure ()) xs
+  concatMapping
+
 filtering : (Monad m) => (a -> Bool) -> Pipe a a m r
 filtering p = recur where
   recur = do
@@ -42,6 +48,14 @@ filtering p = recur where
     if p a
       then yield a *> recur
       else recur
+
+taking : (Monad m) => Nat -> Pipe a a m ()
+taking Z = pure ()
+taking (S n) = await >>= yield *> taking n
+
+dropping : (Monad m) => Nat -> Pipe a a m r
+dropping Z = idP
+dropping (S n) = await *> dropping n
 
 takingWhile : (Monad m) => (a -> Bool) -> Pipe a a m ()
 takingWhile p = recur where
@@ -58,6 +72,15 @@ droppingWhile p = recur where
     if p a
       then recur
       else yield a *> idP
+
+deduplicating : (Eq a, Monad m) => Pipe a a m r
+deduplicating = await >>= \a => yield a *> recur a where
+  recur previous = do
+    a <- await
+    if a == previous
+      then recur previous
+      else yield a *> recur a
+
 
 -- Helper functions to construct Sinks more easily
 -- * `stdoutLn` lifts the standard output to a Sink
