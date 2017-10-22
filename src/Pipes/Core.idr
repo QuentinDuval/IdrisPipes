@@ -1,6 +1,7 @@
 module Pipes.Core
 
-import Control.Monad.Trans
+import public Control.Monad.Identity
+import public Control.Monad.Trans
 
 %access public export
 
@@ -111,6 +112,9 @@ runEffect (Pure r) = pure r             -- Done executing the pipe, return the r
 runEffect (Action a) = a >>= runEffect  -- Execute the action, run the next of the pipe
 runEffect (Yield b next) = absurd b                           -- Cannot happen
 runEffect (Await cont) = runEffect (Await (\v => absurd v))   -- Cannot happen
+
+runPure : Effect Identity r -> r
+runPure = runIdentity . runEffect
 
 -- Consuming a Source
 -- * Summarize a set of values into a single output value
