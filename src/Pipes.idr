@@ -1,6 +1,7 @@
 module Pipes
 
 -- import Control.Category
+import Control.Monad.Identity
 import Control.Monad.Trans
 
 %access public export
@@ -118,19 +119,38 @@ runEffect (Await cont) = runEffect (Await (\v => absurd v))   -- Cannot happen
 -- Consuming a Source
 -- * Summarize a set of values into a single output value
 
-fold : (Monad m) => (a -> b -> b) -> b -> Source a m r -> m b
-fold f = recur where
+foldM : (Monad m) => (a -> b -> m b) -> b -> Source a m r -> m b
+foldM f = recur where
   recur acc (Pure _) = pure acc
   recur acc (Action act) = act >>= recur acc
-  recur acc (Yield b next) = recur (f b acc) next
+  recur acc (Yield a next) = f a acc >>= \b => recur b next
   recur acc (Await cont) = runEffect (Await (\v => absurd v)) -- Cannot happen
 
--- Helper functions to construct pipes more easily
--- * `mapping` lifts a function as a pipe transformation
--- * `filtering` lifts a predicate into a pipe filter
+fold : (Monad m) => (a -> b -> b) -> b -> Source a m r -> m b
+fold f = foldM (\a, b => pure (f a b))
+
+-- Helper functions to construct Sources more easily
+-- * `each` lifts a foldable to a Source
+-- * `stdinLn` lifts the standard output to a Source
 
 each : (Monad m, Foldable f) => f a -> Source a m ()
 each xs = foldr (\x, p => yield x *> p) (pure ()) xs
+
+stdinLn : Source String IO r
+stdinLn = do
+  l <- lift getLine
+  yield l
+  stdinLn
+
+-- Helper functions to construct pipes more easily
+-- * `idP` creates the identity pipe
+-- * `mapping` lifts a function as a pipe transformation
+-- * `filtering` lifts a predicate into a pipe filter
+-- * `takingWhile` lifts a predicate into a pipe breaker
+-- * `droppingWhile` lifts a predicate into a pipe delayed starter
+
+idP : (Monad m) => Pipe a a m r
+idP = await >>= yield *> idP
 
 mapping : (Monad m) => (a -> b) -> Pipe a b m r
 mapping f = recur where
@@ -154,5 +174,30 @@ filtering p = recur where
     if p a
       then yield a *> recur
       else recur
+
+takingWhile : (Monad m) => (a -> Bool) -> Pipe a a m ()
+takingWhile p = recur where
+  recur = do
+    a <- await
+    if p a
+      then yield a *> recur
+      else pure ()
+
+droppingWhile : (Monad m) => (a -> Bool) -> Pipe a a m r
+droppingWhile p = recur where
+  recur = do
+    a <- await
+    if p a
+      then recur
+      else yield a *> idP
+
+-- Helper functions to construct Sinks more easily
+-- * `stdoutLn` lifts the standard output to a Sink
+
+stdoutLn : Sink String IO r
+stdoutLn = do
+  l <- await
+  lift (putStrLn l)
+  stdoutLn
 
 --
