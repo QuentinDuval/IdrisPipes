@@ -3,6 +3,8 @@ module Pipes
 -- import Control.Category
 import Control.Monad.Trans
 
+%access public export
+
 {-
 Main data type for Pipes:
 * not really a `codata`, does not really need `Inf`
@@ -81,13 +83,14 @@ infixl 9 .|
 
 (.|) : (Monad m) => Pipe a b m r -> Pipe b c m r -> Pipe a c m r
 (.|) = fuse where
-  fuse (Pure r1) _ = Pure r1                                -- Termination of pipeline
-  fuse _ (Pure r2) = Pure r2                                -- Termination of pipeline
-  fuse (Yield b next) (Await cont) = next .| cont b         -- Connect yield to await
   fuse up (Yield c next) = Yield c (up .| next)             -- Yielding downstream
+  fuse up (Action a) = lift a >>= \next => up .| next       -- Produce effect downstream
+  fuse (Yield b next) (Await cont) = next .| cont b         -- Connect yield to await
   fuse (Await cont) down = Await (\a => cont a .| down)     -- Awaiting upstream
   fuse (Action a) down = lift a >>= \next => next .| down   -- Produce effect upstream
-  fuse up (Action a) = lift a >>= \next => up .| next       -- Produce effect downstream
+  fuse _ (Pure r2) = Pure r2                                -- Termination of pipeline
+  fuse (Pure r1) _ = Pure r1                                -- Termination of pipeline
+
 
 -- Running a pipeline
 -- * Execute the sequence of effects of the pipe
@@ -99,15 +102,37 @@ runPipe (Action a) = a >>= runPipe  -- Execute the action, run the next of the p
 runPipe (Yield b next) = absurd b                         -- Cannot happen
 runPipe (Await cont) = runPipe (Await (\v => absurd v))   -- Cannot happen
 
+-- Consuming a Source
+-- * Summarize a set of values into a single output value
+
+consume : (Monad m) => (a -> b -> b) -> b -> Source a m r -> m b
+consume f = recur where
+  recur acc (Pure _) = pure acc
+  recur acc (Action act) = act >>= recur acc
+  recur acc (Yield b next) = recur (f b acc) next
+  recur acc (Await cont) = runPipe (Await (\v => absurd v)) -- Cannot happen
+
 -- Helper functions to construct pipes more easily
 -- * `mapping` lifts a function as a pipe transformation
 -- * `filtering` lifts a predicate into a pipe filter
+
+source : (Monad m) => List a -> Source a m ()
+source [] = pure ()
+source (x::xs) = yield x *> source xs
 
 mapping : (Monad m) => (a -> b) -> Pipe a b m r
 mapping f = recur where
   recur = do
     a <- await
     yield (f a)
+    recur
+
+mappingM : (Monad m) => (a -> m b) -> Pipe a b m r
+mappingM f = recur where
+  recur = do
+    a <- await
+    b <- lift (f a)
+    yield b
     recur
 
 filtering : (Monad m) => (a -> Bool) -> Pipe a a m r
