@@ -80,16 +80,30 @@ implementation MonadTrans (Pipe a b) where
 -- * Recursively defined to iterate the action of the pipe
 
 infixl 9 .|
+infixr 9 ~>
+infixr 9 >~
+
+mutual
+
+  -- * Pull-based (downstream starts first)
+
+  (~>) : (Monad m) => Pipe a b m r -> Pipe b c m r -> Pipe a c m r
+  (~>) up (Yield c next) = Yield c (up ~> next)             -- Yielding downstream
+  (~>) up (Action a) = lift a >>= \next => up ~> next       -- Produce effect downstream
+  (~>) (Yield b next) (Await cont) = next ~> cont b         -- Take upstream available value
+  (~>) up (Await cont) = up >~ Await cont                   -- Ask upstream for a value
+  (~>) up (Pure r) = Pure r
+
+  -- * Push-based (upstream starts first)
+
+  (>~) : (Monad m) => Pipe a b m r -> Pipe b c m r -> Pipe a c m r
+  (>~) (Await cont) down = Await (\a => cont a >~ down)     -- Awaiting upstream
+  (>~) (Action a) down = lift a >>= \next => next >~ down   -- Produce effect upstream
+  (>~) (Yield b next) down = Yield b next ~> down           -- Give control downstream
+  (>~) (Pure r) down = Pure r
 
 (.|) : (Monad m) => Pipe a b m r -> Pipe b c m r -> Pipe a c m r
-(.|) = fuse where
-  fuse up (Yield c next) = Yield c (up .| next)             -- Yielding downstream
-  fuse up (Action a) = lift a >>= \next => up .| next       -- Produce effect downstream
-  fuse (Yield b next) (Await cont) = next .| cont b         -- Connect yield to await
-  fuse (Await cont) down = Await (\a => cont a .| down)     -- Awaiting upstream
-  fuse (Action a) down = lift a >>= \next => next .| down   -- Produce effect upstream
-  fuse _ (Pure r2) = Pure r2                                -- Termination of pipeline
-  fuse (Pure r1) _ = Pure r1                                -- Termination of pipeline
+(.|) = (~>)
 
 
 -- Running a pipeline
