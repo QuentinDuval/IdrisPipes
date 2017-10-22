@@ -109,21 +109,21 @@ mutual
 -- * Execute the sequence of effects of the pipe
 -- * Return the final value when no effects are remaining
 
-runPipe : (Monad m) => Effect m r -> m r
-runPipe (Pure r) = pure r           -- Done executing the pipe, return the result
-runPipe (Action a) = a >>= runPipe  -- Execute the action, run the next of the pipe
-runPipe (Yield b next) = absurd b                         -- Cannot happen
-runPipe (Await cont) = runPipe (Await (\v => absurd v))   -- Cannot happen
+runEffect : (Monad m) => Effect m r -> m r
+runEffect (Pure r) = pure r           -- Done executing the pipe, return the result
+runEffect (Action a) = a >>= runEffect  -- Execute the action, run the next of the pipe
+runEffect (Yield b next) = absurd b                         -- Cannot happen
+runEffect (Await cont) = runEffect (Await (\v => absurd v))   -- Cannot happen
 
 -- Consuming a Source
 -- * Summarize a set of values into a single output value
 
-consume : (Monad m) => (a -> b -> b) -> b -> Source a m r -> m b
-consume f = recur where
+fold : (Monad m) => (a -> b -> b) -> b -> Source a m r -> m b
+fold f = recur where
   recur acc (Pure _) = pure acc
   recur acc (Action act) = act >>= recur acc
   recur acc (Yield b next) = recur (f b acc) next
-  recur acc (Await cont) = runPipe (Await (\v => absurd v)) -- Cannot happen
+  recur acc (Await cont) = runEffect (Await (\v => absurd v)) -- Cannot happen
 
 -- Helper functions to construct pipes more easily
 -- * `mapping` lifts a function as a pipe transformation
