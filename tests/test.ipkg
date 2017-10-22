@@ -2,6 +2,9 @@ package test
 
 opts = "--sourcepath ../src --idrispath ../src"
 
+main = Main
+executable = Tutorial
+
 modules = Test.Pipes
         , Test.Tutorial
         , Test.Utils

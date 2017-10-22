@@ -12,3 +12,6 @@ test: build
 clean:
 	idris --clean pipes.ipkg
 	rm -f tests/*.ibc
+
+tuto: build
+	(cd tests; bash tutorial.sh)
