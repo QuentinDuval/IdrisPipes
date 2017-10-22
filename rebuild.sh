@@ -1,4 +1,5 @@
 #!/bin/sh
 
-idris --clean pipes.ipkg
-./build.sh
+make clean
+make build
+make test

@@ -1,14 +1,11 @@
 package pipes
 
+sourceloc = https://github.com/QuentinDuval/IdrisPipes.git
+
 sourcedir = src
 
 modules = Pipes
         , Pipes.Core
         , Pipes.Prelude
-        , Test.Pipes
-        , Test.Tutorial
-        , Test.Utils
-
-tests = Test.Pipes.run_tests
 
 -- opts = "--typeintype --warnpartial"

@@ -1,0 +1,9 @@
+package test
+
+opts = "--sourcepath ../src --idrispath ../src"
+
+modules = Test.Pipes
+        , Test.Tutorial
+        , Test.Utils
+
+tests = Test.Pipes.run_tests
