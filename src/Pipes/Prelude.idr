@@ -10,11 +10,12 @@ import Pipes.Core
 -- * `iterating` creates an infinite series of value f(f(f(f(...))))
 -- * `unfolding` creates a possibly infinite series of value from a seed
 
-stdinLn : Source String IO r
-stdinLn = do
-  l <- lift getLine
-  yield l
-  stdinLn
+stdinLn : String -> Source String IO r
+stdinLn promptLine = recur where
+  recur = do
+    lift (putStr promptLine)
+    lift getLine >>= yield
+    recur
 
 iterating : (Monad m) => (a -> a) -> a -> Source a m r
 iterating f = recur where

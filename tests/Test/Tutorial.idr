@@ -2,14 +2,57 @@ module Test.Tutorial
 
 import Pipes
 
+
+--------------------------------------------------------------------------------
+-- A simple echo program
 --------------------------------------------------------------------------------
 
-echo_example : IO ()
-echo_example = runEffect $
-  stdinLn                       -- Read the standard output
+echo_setup : IO ()
+echo_setup = disableBuffering
+
+echo_bad : IO ()
+echo_bad = do
+  putStr "in> "
+  l <- getLine                  -- Read the standard input
+  when (l /= "quit") $ do       -- Stop upon encountering "quit"
+    putStrLn ("out> " ++ l)     -- Echo the string in standard output
+    echo_bad
+
+echo_good : IO ()
+echo_good = runEffect $
+  stdinLn "in> "                -- Read the standard input
     .| takingWhile (/= "quit")  -- Stop upon encountering "quit"
-    .| mapping ("> " ++)        -- Add the prompt to the string
-    .| stdoutLn                 -- Echo the string
+    .| mapping ("out> " ++)     -- Add the prompt to the string
+    .| stdoutLn                 -- Echo the string in standard output
+
+
+-- Slight modification to the program:
+-- * Do not repeat the same sentence twice
+-- * See how it gets bad on the loop side
+
+echo_once_bad : IO ()
+echo_once_bad = loop (const True) where
+  loop : (String -> Bool) -> IO ()
+  loop isDifferent = do
+    putStr "in> "
+    l <- getLine                  -- Read the standard input
+    when (l /= "quit") $ do       -- Stop upon encountering "quit"
+      when (isDifferent l) $      -- Remove consecutive repeating calls
+        putStrLn ("out> " ++ l)   -- Echo the string in standard output
+      loop (/= l)                 -- Loop with last read string
+
+echo_once_good : IO ()
+echo_once_good = runEffect $
+  stdinLn "in> "                -- Read the standard input
+    .| takingWhile (/= "quit")  -- Stop upon encountering "quit"
+    .| deduplicating            -- Remove consecutive repeating calls
+    .| mapping ("out> " ++)     -- Add the prompt to the string
+    .| stdoutLn                 -- Echo the string in standard output
+
+
+--------------------------------------------------------------------------------
+-- Just exploiting laziness
+--------------------------------------------------------------------------------
 
 sum_with_traces : IO ()
 sum_with_traces = do
@@ -20,6 +63,7 @@ sum_with_limit : IO ()
 sum_with_limit = do
   r <- fold (+) 0 $ each [1..10] .| mappingM (\x => printLn x *> pure x) .| takingWhile (<5)
   printLn r
+
 
 --------------------------------------------------------------------------------
 
