@@ -7,12 +7,25 @@ import Pipes.Core
 
 -- Helper functions to construct Sources more easily
 -- * `stdinLn` lifts the standard output to a Source
+-- * `iterating` creates an infinite series of value f(f(f(f(...))))
+-- * `unfolding` creates a possibly infinite series of value from a seed
 
 stdinLn : Source String IO r
 stdinLn = do
   l <- lift getLine
   yield l
   stdinLn
+
+iterating : (Monad m) => (a -> a) -> a -> Source a m r
+iterating f = recur where
+  recur a = do
+    yield a
+    recur (f a)
+
+unfolding : (Monad m) => (seed -> Maybe (a, seed)) -> seed -> Source a m ()
+unfolding f = recur . f where
+  recur Nothing = pure ()
+  recur (Just (a, seed)) = yield a *> recur (f seed)
 
 -- Helper functions to construct pipes more easily
 -- * `mapping` lifts a function as a pipe transformation
@@ -81,14 +94,26 @@ deduplicating = await >>= \a => yield a *> recur a where
       then recur previous
       else yield a *> recur a
 
+repeating : (Monad m) => Nat -> Pipe a a m r
+repeating n = recur where
+  recur = do
+    a <- await
+    sequence_ (replicate n (yield a))
+    recur
+
 
 -- Helper functions to construct Sinks more easily
 -- * `stdoutLn` lifts the standard output to a Sink
+-- * `discard` consumes all outputs and ignore them
 
 stdoutLn : Sink String IO r
 stdoutLn = do
   l <- await
   lift (putStrLn l)
   stdoutLn
+
+discard : (Monad m) => Source a m r
+discard = recur where
+  recur = await *> recur
 
 --
