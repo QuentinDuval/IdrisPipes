@@ -11,10 +11,10 @@ Main data type for Pipes:
 * but most function will need `assert_total`
 -}
 data Pipe : (a, b : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
-  Pure    : r -> Pipe a b m r                     -- Lift a value into the pipe
-  Action  : m (Pipe a b m r) -> Pipe a b m r      -- Wrap a monadic action
-  Yield   : b -> Pipe a b m r -> Pipe a b m r     -- Yield a value and next status
-  Await   : (a -> Pipe a b m r) -> Pipe a b m r   -- Yield a continuation (expecting a value)
+  Pure    : r -> Pipe a b m r                           -- Lift a value into the pipe
+  Action  : Lazy (m (Pipe a b m r)) -> Pipe a b m r     -- Interleave an effect
+  Yield   : b -> Lazy (Pipe a b m r) -> Pipe a b m r    -- Yield a value and next status
+  Await   : (a -> Pipe a b m r) -> Pipe a b m r         -- Yield a continuation (expecting a value)
 
 -- Public operations inside a coroutine
 -- * `yield` sends a value downstream
@@ -42,32 +42,32 @@ Effect m r = Pipe Void Void m r
 -- * Recursively replace `r` with `f r`
 
 implementation (Monad m) => Functor (Pipe a b m) where
-  map f p = assert_total $ case p of
-    Pure r => Pure (f r)
-    Action a => Action (a >>= pure . map f)
-    Yield b next => Yield b (map f next)
-    Await cont => Await (map f . cont)
+  map f = assert_total recur where
+    recur (Pure r) = Pure (f r)
+    recur (Action a) = Action (a >>= pure . recur)
+    recur (Yield b next) = Yield b (recur next)
+    recur (Await cont) = Await (recur . cont)
 
 -- Applicative implementation
 -- * Recursively replace `r` with `map r pa`
 
 implementation (Monad m) => Applicative (Pipe a b m) where
   pure = Pure
-  pf <*> pa = assert_total $ case pf of
-    Pure f => map f pa
-    Action a => Action (a >>= pure . (<*> pa))
-    Yield b next => Yield b (next <*> pa)
-    Await cont => Await (\a => cont a <*> pa)
+  pf <*> pa = assert_total (recur pf) where
+    recur (Pure f) = map f pa
+    recur (Action a) = Action (a >>= pure . recur)
+    recur (Yield b next) = Yield b (recur next)
+    recur (Await cont) = Await (recur . cont)
 
 -- Monad implementation
 -- * Recursively replace `r` with `f r`
 
 implementation (Monad m) => Monad (Pipe a b m) where
-  m >>= f = assert_total $ case m of
-    Pure r => f r
-    Action a => Action (a >>= pure . (>>= f))
-    Yield b next => Yield b (next >>= f)
-    Await cont => Await (\a => cont a >>= f)
+  m >>= f = assert_total (recur m) where
+    recur (Pure r) = f r
+    recur (Action a) = Action (a >>= pure . recur)
+    recur (Yield b next) = Yield b (recur next)
+    recur (Await cont) = Await (recur . cont)
 
 -- Monad Transformer implementation
 -- * Wrap the monadic action in a `Action` constructor
