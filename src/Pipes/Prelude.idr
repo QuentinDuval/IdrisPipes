@@ -49,11 +49,15 @@ mappingM f = recur where
     yield b
     recur
 
-concatMapping : (Monad m, Foldable f) => Pipe (f a) a m r
-concatMapping = do
-  xs <- await
-  foldr (\x, p => yield x *> p) (pure ()) xs
-  concatMapping
+concatting : (Monad m, Foldable f) => Pipe (f a) a m r
+concatting = recur where
+  recur = do
+    xs <- await
+    foldr (\x, p => yield x *> p) (pure ()) xs
+    recur
+
+concatMapping : (Monad m, Foldable f) => (a -> f b) -> Pipe a b m r
+concatMapping f = mapping f .| concatting
 
 filtering : (Monad m) => (a -> Bool) -> Pipe a a m r
 filtering p = recur where
@@ -101,6 +105,9 @@ repeating n = recur where
     a <- await
     sequence_ (replicate n (yield a))
     recur
+
+tracing : (Monad m) => (a -> m ()) -> Pipe a a m r
+tracing trace = mappingM (\x => trace x *> pure x)
 
 
 -- Helper functions to construct Sinks more easily
