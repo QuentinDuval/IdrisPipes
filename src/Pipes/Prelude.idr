@@ -119,7 +119,7 @@ stdoutLn = do
   lift (putStrLn l)
   stdoutLn
 
-discard : (Monad m) => Source a m r
+discard : (Monad m) => Sink a m r
 discard = recur where
   recur = await *> recur
 
