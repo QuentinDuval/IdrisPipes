@@ -92,12 +92,11 @@ droppingWhile p = recur where
       else yield a *> idP
 
 deduplicating : (Eq a, Monad m) => Pipe a a m r
-deduplicating = await >>= \a => yield a *> recur a where
-  recur previous = do
+deduplicating = recur (the (a -> Bool) (const False)) where
+  recur isPrevious = do
     a <- await
-    if a == previous
-      then recur previous
-      else yield a *> recur a
+    when (not (isPrevious a)) (yield a)
+    recur (/= a)
 
 repeating : (Monad m) => Nat -> Pipe a a m r
 repeating n = recur where
