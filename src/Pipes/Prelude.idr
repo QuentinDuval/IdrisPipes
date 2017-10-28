@@ -132,11 +132,11 @@ multiplying : (Monad m, Num a) => Sink a m a
 multiplying = fold (*) 1
 
 consuming : (Monad m) => Sink a m (List a)
-consuming = recur (the (List a) []) where
-  recur xs = do
+consuming = recur (the (List a -> List a) id) where
+  recur diffList = do
     mx <- await
     case mx of
-      Just x => recur (x :: xs)
-      Nothing => pure (reverse xs)
+      Just x => recur (diffList . \l => x :: l)
+      Nothing => pure (diffList [])
 
 --
