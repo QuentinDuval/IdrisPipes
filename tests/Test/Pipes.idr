@@ -3,6 +3,8 @@ module Test.Pipes
 import Pipes
 import Test.Utils
 
+%access public export
+
 
 --------------------------------------------------------------------------------
 -- Pure pipelines
@@ -37,6 +39,10 @@ test_concatMapping : Test
 test_concatMapping = do
   assertEq 110 $ runPure $ each [1..10] .| concatMapping (\x => [x, x]) .| summing
 
+test_grouping : Test
+test_grouping = do
+  assertEq [2, 4, 6, 8, 10] $ runPure $ each [1..5] .| repeating 2 .| grouping .| mapping sum .| consuming
+
 
 --------------------------------------------------------------------------------
 -- Effectful pipes
@@ -49,7 +55,6 @@ test_concatMapping = do
 -- All tests
 --------------------------------------------------------------------------------
 
-export
 run_tests : IO ()
 run_tests = runTestSuite
     [ test_filtering_mapping
@@ -57,6 +62,7 @@ run_tests = runTestSuite
     , test_unfolding_drop
     , test_replicating_deduplicating
     , test_concatMapping
+    , test_grouping
     ]
 
 --

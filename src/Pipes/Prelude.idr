@@ -92,6 +92,25 @@ deduplicating = recur (the (a -> Bool) (const True)) where
 repeating : (Monad m) => Nat -> Pipe a m a
 repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
 
+groupingBy : (Monad m) => (a -> a -> Bool) -> Pipe a m (List a)
+groupingBy sameGroup = recur (the (List a) []) where
+  recur xs = do
+    mx <- await
+    case mx of
+      Nothing => when (length xs > 0) (yield (reverse xs))
+      Just y => do
+        case xs of
+          [] => recur [y]
+          (x::_) =>
+            if sameGroup x y
+                then recur (y::xs)
+                else do
+                  yield (reverse xs)
+                  recur [y]
+
+grouping : (Monad m, Eq a) => Pipe a m (List a)
+grouping = groupingBy (==)
+
 tracing : (Monad m) => (a -> m ()) -> Pipe a m a
 tracing trace = mappingM (\x => trace x *> pure x)
 
@@ -111,5 +130,13 @@ summing = fold (+) 0
 
 multiplying : (Monad m, Num a) => Sink a m a
 multiplying = fold (*) 1
+
+consuming : (Monad m) => Sink a m (List a)
+consuming = recur (the (List a) []) where
+  recur xs = do
+    mx <- await
+    case mx of
+      Just x => recur (x :: xs)
+      Nothing => pure (reverse xs)
 
 --
