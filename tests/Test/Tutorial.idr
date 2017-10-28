@@ -1,6 +1,7 @@
 module Test.Tutorial
 
 import Pipes
+import Test.Pipes
 
 
 --------------------------------------------------------------------------------

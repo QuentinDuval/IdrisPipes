@@ -11,21 +11,31 @@ import Test.Utils
 even : Int -> Bool
 even n = mod n 2 == 0
 
-should_fold_ints : Test
-should_fold_ints = do
+test_filtering_mapping : Test
+test_filtering_mapping = do
   let ints = each [1..10] .| filtering even .| mapping (*2)
-  assertEq 60 $ runPure (ints .| fold (+) 0)
-  assertEq 122880 $ runPure (ints .| fold (*) 1)
+  assertEq 60 $ runPure (ints .| summing)
+  assertEq 122880 $ runPure (ints .| multiplying)
 
---------------------------------------------------------------------------------
+test_iterating_take : Test
+test_iterating_take = do
+  assertEq 55 $ runPure $ iterating (+1) 1 .| taking 10 .| summing
+  assertEq 55 $ runPure $ iterating (+1) 1 .| takingWhile (< 11) .| summing
 
-isVowel : Char -> Bool
-isVowel c = c `elem` (unpack "aeiou")
+test_unfolding_drop : Test
+test_unfolding_drop = do
+  let source = unfolding (\x => Just (x, x + 1)) (-9)
+  assertEq 55 $ runPure $ source .| dropping 10 .| taking 10 .| summing
+  assertEq 55 $ runPure $ source .| droppingWhile (< 1) .| taking 10 .| summing
 
-should_fold_strings : Test
-should_fold_strings = do
-  let strs = each ['a'..'z'] .| filtering isVowel .| fold (::) []
-  assertEq "uoiea" $ pack (runPure strs)
+test_replicating_deduplicating : Test
+test_replicating_deduplicating = do
+  assertEq 110 $ runPure $ each [1..10] .| repeating 2 .| summing
+  assertEq 55 $ runPure $ each [1..10] .| repeating 2 .| deduplicating .| summing
+
+test_concatMapping : Test
+test_concatMapping = do
+  assertEq 110 $ runPure $ each [1..10] .| concatMapping (\x => [x, x]) .| summing
 
 
 --------------------------------------------------------------------------------
@@ -42,8 +52,11 @@ should_fold_strings = do
 export
 run_tests : IO ()
 run_tests = runTestSuite
-    [ should_fold_ints
-    , should_fold_strings
+    [ test_filtering_mapping
+    , test_iterating_take
+    , test_unfolding_drop
+    , test_replicating_deduplicating
+    , test_concatMapping
     ]
 
 --

@@ -26,7 +26,9 @@ iterating f = recur where
 unfolding : (Monad m) => (seed -> Maybe (a, seed)) -> seed -> Source m a
 unfolding f = recur . f where
   recur Nothing = pure ()
-  recur (Just (a, seed)) = yield a *> recur (f seed)
+  recur (Just (a, seed)) = do
+    yield a
+    recur (f seed)
 
 -- Helper functions to construct pipes more easily
 -- * `mapping` lifts a function as a pipe transformation
@@ -78,12 +80,12 @@ droppingWhile p = recur where
       Nothing => pure ()
 
 deduplicating : (Eq a, Monad m) => Pipe a m a
-deduplicating = recur (the (a -> Bool) (const False)) where
-  recur isPrevious = do
+deduplicating = recur (the (a -> Bool) (const True)) where
+  recur isDifferent = do
     mx <- await
     case mx of
       Just x => do
-        when (not (isPrevious x)) (yield x)
+        when (isDifferent x) (yield x)
         recur (/= x)
       Nothing => pure ()
 
@@ -103,5 +105,11 @@ stdoutLn = awaitForever $ \x => lift (putStrLn x)
 
 discard : (Monad m) => Sink a m ()
 discard = awaitForever $ \_ => pure ()
+
+summing : (Monad m, Num a) => Sink a m a
+summing = fold (+) 0
+
+multiplying : (Monad m, Num a) => Sink a m a
+multiplying = fold (*) 1
 
 --
