@@ -12,7 +12,7 @@ Main data type for Pipes:
 export
 data PipeM : (a, b : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
   Pure    : r -> PipeM a b m r                            -- Lift a value into the pipe
-  Action  : Inf (m (PipeM a b m r)) -> PipeM a b m r      -- Interleave an effect
+  Action  : (m (Inf (PipeM a b m r))) -> PipeM a b m r    -- Interleave an effect
   Yield   : Inf (PipeM a b m r) -> b -> PipeM a b m r     -- Yield a value and next status
   Await   : (Maybe a -> PipeM a b m r) -> PipeM a b m r   -- Yield a continuation (expecting a value)
 
@@ -55,7 +55,7 @@ export
 implementation (Monad m) => Functor (PipeM a b m) where
   map f = assert_total recur where
     recur (Pure r) = Pure (f r)
-    recur (Action a) = Action (a >>= pure . recur)
+    recur (Action a) = Action (a >>= \x => pure (recur x))
     recur (Yield next b) = Yield (recur next) b
     recur (Await cont) = Await (recur . cont)
 
@@ -67,7 +67,7 @@ implementation (Monad m) => Applicative (PipeM a b m) where
   pure = Pure
   pf <*> pa = assert_total (recur pf) where
     recur (Pure f) = map f pa
-    recur (Action a) = Action (a >>= pure . recur)
+    recur (Action a) = Action (a >>= \x => pure (recur x))
     recur (Yield next b) = Yield (recur next) b
     recur (Await cont) = Await (recur . cont)
 
@@ -78,7 +78,7 @@ export
 implementation (Monad m) => Monad (PipeM a b m) where
   m >>= f = assert_total (recur m) where
     recur (Pure r) = f r
-    recur (Action a) = Action (a >>= pure . recur)
+    recur (Action a) = Action (a >>= \x => pure (recur x))
     recur (Yield next b) = Yield (recur next) b
     recur (Await cont) = Await (recur . cont)
 
@@ -88,7 +88,7 @@ implementation (Monad m) => Monad (PipeM a b m) where
 
 export
 implementation MonadTrans (PipeM a b) where
-  lift m = assert_total $ Action (m >>= pure . Pure)
+  lift m = assert_total $ Action (m >>= \x => pure (Pure x))
 
 -- Assembling pipes (forms a Category)
 -- * Recursively defined to iterate the action of the pipe
@@ -119,8 +119,8 @@ mutual
 
 export
 runEffect : (Monad m) => Effect m r -> m r
-runEffect (Pure r) = pure r             -- Done executing the pipe, return the result
-runEffect (Action a) = a >>= runEffect  -- Execute the action, run the next of the pipe
+runEffect (Pure r) = pure r                         -- Done executing the pipe, return the result
+runEffect (Action a) = a >>= \p => runEffect p      -- Execute the action, run the next of the pipe
 runEffect (Yield next b) = absurd b                 -- Cannot happen
 runEffect (Await cont) = runEffect (cont Nothing)   -- Cannot happen (TODO: use absurd)
 
