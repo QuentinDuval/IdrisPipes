@@ -10,38 +10,42 @@ Main data type for Pipes:
 * not really a `codata`, does not really need `Inf`
 * but most function will need `assert_total`
 -}
-data Pipe : (a, b : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
-  Pure    : r -> Pipe a b m r                           -- Lift a value into the pipe
-  Action  : Inf (m (Pipe a b m r)) -> Pipe a b m r      -- Interleave an effect
-  Yield   : Inf (Pipe a b m r) -> b -> Pipe a b m r     -- Yield a value and next status
-  Await   : (Maybe a -> Pipe a b m r) -> Pipe a b m r   -- Yield a continuation (expecting a value)
+data PipeM : (a, b : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
+  Pure    : r -> PipeM a b m r                            -- Lift a value into the pipe
+  Action  : Inf (m (PipeM a b m r)) -> PipeM a b m r      -- Interleave an effect
+  Yield   : Inf (PipeM a b m r) -> b -> PipeM a b m r     -- Yield a value and next status
+  Await   : (Maybe a -> PipeM a b m r) -> PipeM a b m r   -- Yield a continuation (expecting a value)
 
 -- Public operations inside a coroutine
 -- * `yield` sends a value downstream
 -- * `await` waits from an upstream value
 
-yield : b -> Pipe a b m ()
+yield : b -> PipeM a b m ()
 yield = Yield (Pure ())
 
-await : Pipe a b m (Maybe a)
+await : PipeM a b m (Maybe a)
 await = Await Pure
 
 -- Source cannot `await` any input
-Source : (b: Type) -> (m: Type -> Type) -> (r: Type) -> Type
-Source b m r = Pipe Void b m r
+Source : (m: Type -> Type) -> (b: Type) -> Type
+Source m b = PipeM Void b m ()
+
+-- Pipe can `await` and `yield`
+Pipe : (a: Type) -> (m: Type -> Type) -> (b: Type) -> Type
+Pipe a m b = PipeM a b m ()
 
 -- Sink cannot `yield` anything
 Sink : (a: Type) -> (m: Type -> Type) -> (r: Type) -> Type
-Sink a m r = Pipe a Void m r
+Sink a m r = PipeM a Void m r
 
 -- Effect cannot `await` or `yield` (pure effect)
 Effect : (m: Type -> Type) -> (r: Type) -> Type
-Effect m r = Pipe Void Void m r
+Effect m r = PipeM Void Void m r
 
 -- Functor implementation:
 -- * Recursively replace `r` with `f r`
 
-implementation (Monad m) => Functor (Pipe a b m) where
+implementation (Monad m) => Functor (PipeM a b m) where
   map f = assert_total recur where
     recur (Pure r) = Pure (f r)
     recur (Action a) = Action (a >>= pure . recur)
@@ -51,7 +55,7 @@ implementation (Monad m) => Functor (Pipe a b m) where
 -- Applicative implementation
 -- * Recursively replace `r` with `map r pa`
 
-implementation (Monad m) => Applicative (Pipe a b m) where
+implementation (Monad m) => Applicative (PipeM a b m) where
   pure = Pure
   pf <*> pa = assert_total (recur pf) where
     recur (Pure f) = map f pa
@@ -62,7 +66,7 @@ implementation (Monad m) => Applicative (Pipe a b m) where
 -- Monad implementation
 -- * Recursively replace `r` with `f r`
 
-implementation (Monad m) => Monad (Pipe a b m) where
+implementation (Monad m) => Monad (PipeM a b m) where
   m >>= f = assert_total (recur m) where
     recur (Pure r) = f r
     recur (Action a) = Action (a >>= pure . recur)
@@ -73,7 +77,7 @@ implementation (Monad m) => Monad (Pipe a b m) where
 -- * Wrap the monadic action in a `Action` constructor
 -- * Wrap the monadic return in a `Pure` constructor
 
-implementation MonadTrans (Pipe a b) where
+implementation MonadTrans (PipeM a b) where
   lift m = assert_total $ Action (m >>= pure . Pure)
 
 -- Assembling pipes (forms a Category)
@@ -87,20 +91,20 @@ infixr 9 >~
 mutual
 
   -- * Pull-based (downstream starts first)
-  (~>) : (Monad m) => Pipe a b m r1 -> Pipe b c m r2 -> Pipe a c m r2
+  (~>) : (Monad m) => PipeM a b m r1 -> PipeM b c m r2 -> PipeM a c m r2
   (~>) up (Yield next c) = Yield (up ~> next) c             -- Yielding downstream
   (~>) up (Action a) = lift a >>= \next => up ~> next       -- Produce effect downstream
   (~>) up (Await cont) = up >~ cont                         -- Ask upstream for a value
   (~>) up (Pure r) = Pure r
 
   -- * Push-based (upstream starts first)
-  (>~) : (Monad m) => Pipe a b m r1 -> (Maybe b -> Pipe b c m r2) -> Pipe a c m r2
+  (>~) : (Monad m) => PipeM a b m r1 -> (Maybe b -> PipeM b c m r2) -> PipeM a c m r2
   (>~) (Await cont) down = Await (\a => cont a >~ down)     -- Awaiting upstream
   (>~) (Action a) down = lift a >>= \next => next >~ down   -- Produce effect upstream
   (>~) (Yield next b) down = next ~> down (Just b)          -- Give control downstream
-  (>~) (Pure r) down = Pure r ~> down Nothing
+  (>~) (Pure r) down = Pure r ~> down Nothing               -- Termination, send Nothing to next
 
-(.|) : (Monad m) => Pipe a b m r1 -> Pipe b c m r2 -> Pipe a c m r2
+(.|) : (Monad m) => PipeM a b m r1 -> PipeM b c m r2 -> PipeM a c m r2
 (.|) = (~>)
 
 -- Running a Effect
@@ -134,13 +138,13 @@ fold f = foldM (\a, b => pure (f a b))
 -- * `idP` creates the identity Pipe
 -- * `each` lifts a foldable to a Source
 
-idP : (Monad m) => Pipe a a m ()
+idP : (Monad m) => Pipe a m a
 idP = Await (maybe (Pure ()) (Yield idP))
 
-each : (Monad m, Foldable f) => f a -> Source a m ()
+each : (Monad m, Foldable f) => f a -> Source m a
 each xs = foldr (\x, p => yield x *> p) (pure ()) xs
 
-awaitForever : (Monad m) => (i -> Pipe i o m r) -> Pipe i o m ()
+awaitForever : (Monad m) => (i -> PipeM i o m r) -> Pipe i m o
 awaitForever f = recur where
   recur = await >>= maybe (pure ()) (\x => f x *> recur)
 

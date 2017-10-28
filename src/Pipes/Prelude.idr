@@ -10,20 +10,20 @@ import Pipes.Core
 -- * `iterating` creates an infinite series of value f(f(f(f(...))))
 -- * `unfolding` creates a possibly infinite series of value from a seed
 
-stdinLn : String -> Source String IO ()
+stdinLn : String -> Source IO String
 stdinLn promptLine = recur where
   recur = do
     lift (putStr promptLine)
     lift getLine >>= yield
     recur
 
-iterating : (Monad m) => (a -> a) -> a -> Source a m r
+iterating : (Monad m) => (a -> a) -> a -> Source m a
 iterating f = recur where
   recur a = do
     yield a
     recur (f a)
 
-unfolding : (Monad m) => (seed -> Maybe (a, seed)) -> seed -> Source a m ()
+unfolding : (Monad m) => (seed -> Maybe (a, seed)) -> seed -> Source m a
 unfolding f = recur . f where
   recur Nothing = pure ()
   recur (Just (a, seed)) = yield a *> recur (f seed)
@@ -34,26 +34,26 @@ unfolding f = recur . f where
 -- * `takingWhile` lifts a predicate into a pipe breaker
 -- * `droppingWhile` lifts a predicate into a pipe delayed starter
 
-mapping : (Monad m) => (a -> b) -> Pipe a b m ()
+mapping : (Monad m) => (a -> b) -> Pipe a m b
 mapping f = awaitForever (yield . f)
 
-mappingM : (Monad m) => (a -> m b) -> Pipe a b m ()
+mappingM : (Monad m) => (a -> m b) -> Pipe a m b
 mappingM f = awaitForever $ \x => lift (f x) >>= yield
 
-concatting : (Monad m, Foldable f) => Pipe (f a) a m ()
+concatting : (Monad m, Foldable f) => Pipe (f a) m a
 concatting = awaitForever $ foldr (\x, p => yield x *> p) (pure ())
 
-concatMapping : (Monad m, Foldable f) => (a -> f b) -> Pipe a b m ()
+concatMapping : (Monad m, Foldable f) => (a -> f b) -> Pipe a m b
 concatMapping f = mapping f .| concatting
 
-filtering : (Monad m) => (a -> Bool) -> Pipe a a m ()
+filtering : (Monad m) => (a -> Bool) -> Pipe a m a
 filtering p = awaitForever $ \x => if p x then yield x else pure ()
 
-taking : (Monad m) => Nat -> Pipe a a m ()
+taking : (Monad m) => Nat -> Pipe a m a
 taking Z = pure ()
 taking (S n) = await >>= maybe (pure ()) (\x => yield x *> taking n)
 
-dropping : (Monad m) => Nat -> Pipe a a m ()
+dropping : (Monad m) => Nat -> Pipe a m a
 dropping Z = idP
 dropping (S n) = do
   mx <- await
@@ -61,7 +61,7 @@ dropping (S n) = do
     Just x => dropping n
     Nothing => pure ()
 
-takingWhile : (Monad m) => (a -> Bool) -> Pipe a a m ()
+takingWhile : (Monad m) => (a -> Bool) -> Pipe a m a
 takingWhile p = recur where
   recur = do
     mx <- await
@@ -69,7 +69,7 @@ takingWhile p = recur where
       Just x => if p x then yield x *> recur else pure ()
       Nothing => pure ()
 
-droppingWhile : (Monad m) => (a -> Bool) -> Pipe a a m ()
+droppingWhile : (Monad m) => (a -> Bool) -> Pipe a m a
 droppingWhile p = recur where
   recur = do
     mx <- await
@@ -77,7 +77,7 @@ droppingWhile p = recur where
       Just x => if p x then recur else yield x *> idP
       Nothing => pure ()
 
-deduplicating : (Eq a, Monad m) => Pipe a a m ()
+deduplicating : (Eq a, Monad m) => Pipe a m a
 deduplicating = recur (the (a -> Bool) (const False)) where
   recur isPrevious = do
     mx <- await
@@ -87,10 +87,10 @@ deduplicating = recur (the (a -> Bool) (const False)) where
         recur (/= x)
       Nothing => pure ()
 
-repeating : (Monad m) => Nat -> Pipe a a m ()
+repeating : (Monad m) => Nat -> Pipe a m a
 repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
 
-tracing : (Monad m) => (a -> m ()) -> Pipe a a m ()
+tracing : (Monad m) => (a -> m ()) -> Pipe a m a
 tracing trace = mappingM (\x => trace x *> pure x)
 
 
