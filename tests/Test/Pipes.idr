@@ -14,8 +14,8 @@ even n = mod n 2 == 0
 should_fold_ints : Test
 should_fold_ints = do
   let ints = each [1..10] .| filtering even .| mapping (*2)
-  assertEq 60 (runIdentity $ fold (+) 0 ints)
-  assertEq 122880 (runIdentity $ fold (*) 1 ints)
+  assertEq 60 $ runPure (ints .| fold (+) 0)
+  assertEq 122880 $ runPure (ints .| fold (*) 1)
 
 --------------------------------------------------------------------------------
 
@@ -24,8 +24,8 @@ isVowel c = c `elem` (unpack "aeiou")
 
 should_fold_strings : Test
 should_fold_strings = do
-  let strs = each ['a'..'z'] .| filtering isVowel
-  assertEq "uoiea" (pack (runIdentity $ fold (::) [] strs))
+  let strs = each ['a'..'z'] .| filtering isVowel .| fold (::) []
+  assertEq "uoiea" $ pack (runPure strs)
 
 
 --------------------------------------------------------------------------------

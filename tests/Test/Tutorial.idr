@@ -56,12 +56,12 @@ echo_once_good = runEffect $
 
 sum_with_traces : IO ()
 sum_with_traces = do
-  r <- fold (+) 0 $ each [1..10] .| tracing printLn
+  r <- runEffect $ each [1..10] .| tracing printLn .| fold (+) 0
   printLn r
 
 sum_with_limit : IO ()
 sum_with_limit = do
-  r <- fold (+) 0 $ each [1..10] .| tracing printLn .| takingWhile (< 5)
+  r <- runEffect $ each [1..10] .| tracing printLn .| takingWhile (< 5) .| fold (+) 0
   printLn r
 
 

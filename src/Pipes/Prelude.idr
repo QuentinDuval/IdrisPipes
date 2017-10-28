@@ -10,7 +10,7 @@ import Pipes.Core
 -- * `iterating` creates an infinite series of value f(f(f(f(...))))
 -- * `unfolding` creates a possibly infinite series of value from a seed
 
-stdinLn : String -> Source String IO r
+stdinLn : String -> Source String IO ()
 stdinLn promptLine = recur where
   recur = do
     lift (putStr promptLine)
@@ -34,78 +34,63 @@ unfolding f = recur . f where
 -- * `takingWhile` lifts a predicate into a pipe breaker
 -- * `droppingWhile` lifts a predicate into a pipe delayed starter
 
-mapping : (Monad m) => (a -> b) -> Pipe a b m r
-mapping f = recur where
-  recur = do
-    a <- await
-    yield (f a)
-    recur
+mapping : (Monad m) => (a -> b) -> Pipe a b m ()
+mapping f = awaitForever (yield . f)
 
-mappingM : (Monad m) => (a -> m b) -> Pipe a b m r
-mappingM f = recur where
-  recur = do
-    a <- await
-    b <- lift (f a)
-    yield b
-    recur
+mappingM : (Monad m) => (a -> m b) -> Pipe a b m ()
+mappingM f = awaitForever $ \x => lift (f x) >>= yield
 
-concatting : (Monad m, Foldable f) => Pipe (f a) a m r
-concatting = recur where
-  recur = do
-    xs <- await
-    foldr (\x, p => yield x *> p) (pure ()) xs
-    recur
+concatting : (Monad m, Foldable f) => Pipe (f a) a m ()
+concatting = awaitForever $ foldr (\x, p => yield x *> p) (pure ())
 
-concatMapping : (Monad m, Foldable f) => (a -> f b) -> Pipe a b m r
+concatMapping : (Monad m, Foldable f) => (a -> f b) -> Pipe a b m ()
 concatMapping f = mapping f .| concatting
 
-filtering : (Monad m) => (a -> Bool) -> Pipe a a m r
-filtering p = recur where
-  recur = do
-    a <- await
-    if p a
-      then yield a *> recur
-      else recur
+filtering : (Monad m) => (a -> Bool) -> Pipe a a m ()
+filtering p = awaitForever $ \x => if p x then yield x else pure ()
 
 taking : (Monad m) => Nat -> Pipe a a m ()
 taking Z = pure ()
-taking (S n) = await >>= yield *> taking n
+taking (S n) = await >>= maybe (pure ()) (\x => yield x *> taking n)
 
-dropping : (Monad m) => Nat -> Pipe a a m r
+dropping : (Monad m) => Nat -> Pipe a a m ()
 dropping Z = idP
-dropping (S n) = await *> dropping n
+dropping (S n) = do
+  mx <- await
+  case mx of
+    Just x => dropping n
+    Nothing => pure ()
 
 takingWhile : (Monad m) => (a -> Bool) -> Pipe a a m ()
 takingWhile p = recur where
   recur = do
-    a <- await
-    if p a
-      then yield a *> recur
-      else pure ()
+    mx <- await
+    case mx of
+      Just x => if p x then yield x *> recur else pure ()
+      Nothing => pure ()
 
-droppingWhile : (Monad m) => (a -> Bool) -> Pipe a a m r
+droppingWhile : (Monad m) => (a -> Bool) -> Pipe a a m ()
 droppingWhile p = recur where
   recur = do
-    a <- await
-    if p a
-      then recur
-      else yield a *> idP
+    mx <- await
+    case mx of
+      Just x => if p x then recur else yield x *> idP
+      Nothing => pure ()
 
-deduplicating : (Eq a, Monad m) => Pipe a a m r
+deduplicating : (Eq a, Monad m) => Pipe a a m ()
 deduplicating = recur (the (a -> Bool) (const False)) where
   recur isPrevious = do
-    a <- await
-    when (not (isPrevious a)) (yield a)
-    recur (/= a)
+    mx <- await
+    case mx of
+      Just x => do
+        when (not (isPrevious x)) (yield x)
+        recur (/= x)
+      Nothing => pure ()
 
-repeating : (Monad m) => Nat -> Pipe a a m r
-repeating n = recur where
-  recur = do
-    a <- await
-    sequence_ (replicate n (yield a))
-    recur
+repeating : (Monad m) => Nat -> Pipe a a m ()
+repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
 
-tracing : (Monad m) => (a -> m ()) -> Pipe a a m r
+tracing : (Monad m) => (a -> m ()) -> Pipe a a m ()
 tracing trace = mappingM (\x => trace x *> pure x)
 
 
@@ -113,14 +98,10 @@ tracing trace = mappingM (\x => trace x *> pure x)
 -- * `stdoutLn` lifts the standard output to a Sink
 -- * `discard` consumes all outputs and ignore them
 
-stdoutLn : Sink String IO r
-stdoutLn = do
-  l <- await
-  lift (putStrLn l)
-  stdoutLn
+stdoutLn : Sink String IO ()
+stdoutLn = awaitForever $ \x => lift (putStrLn x)
 
-discard : (Monad m) => Sink a m r
-discard = recur where
-  recur = await *> recur
+discard : (Monad m) => Sink a m ()
+discard = awaitForever $ \_ => pure ()
 
 --
