@@ -4,7 +4,6 @@ import public Control.Monad.Identity
 import public Control.Monad.Trans
 
 
-
 ||| Main data type for Pipes:
 ||| * `a` is the type flowing in from the upstream
 ||| * `b` is the type flowing out to downstream
@@ -15,7 +14,7 @@ import public Control.Monad.Trans
 export
 data PipeM : (a, b, r1 : Type) -> (m : Type -> Type) -> (r2 : Type) -> Type where
   Pure    : r2 -> PipeM a b r1 m r2                                 -- Lift a value into the pipe
-  Action  : (m (Inf (PipeM a b r1 m r2))) -> PipeM a b r1 m r2      -- Interleave an effect
+  Action  : m (Inf (PipeM a b r1 m r2)) -> PipeM a b r1 m r2        -- Interleave an effect
   Yield   : Inf (PipeM a b r1 m r2) -> b -> PipeM a b r1 m r2       -- Yield a value and next status
   Await   : (Either r1 a -> PipeM a b r1 m r2) -> PipeM a b r1 m r2 -- Yield a continuation (expecting a value)
 
@@ -28,8 +27,8 @@ yield = Yield (Pure ())
 export
 await : PipeM a b r1 m (Maybe a)
 await = Await $ \v =>
-  case v of Left _ => Pure (the (Maybe a) Nothing)
-            Right x => Pure (Just x)
+  case v of Right x => Pure (Just x)
+            _ => Pure (the (Maybe a) Nothing)
 
 ||| `awaitOr` waits from an upstream value, or result of upstream pipe
 export
@@ -117,19 +116,25 @@ mutual
   (>~) (Pure r) down = Pure r .| down (Left r)               -- Termination, send Nothing to next
 
 
-||| Running a Effect
+||| Run an Effect and collect the output
 ||| * Execute the sequence of effects of the pipe
 ||| * Return the final value when no effects are remaining
 export
-runEffect : (Monad m) => Effect m r -> m r
-runEffect (Pure r) = pure r                         -- Done executing the pipe, return the result
-runEffect (Action a) = a >>= \p => runEffect p      -- Execute the action, run the next of the pipe
-runEffect (Yield next b) = absurd b
-runEffect (Await cont) = runEffect $ Await (either absurd absurd)
+runPipe : (Monad m) => Effect m r -> m r
+runPipe (Pure r) = pure r                         -- Done executing the pipe, return the result
+runPipe (Action a) = a >>= \p => runPipe p        -- Execute the action, run the next of the pipe
+runPipe (Yield next b) = absurd b
+runPipe (Await cont) = runPipe $ Await (either absurd absurd)
 
+||| Run an Effect and discard the output
+export
+runEffect : (Monad m) => Effect m r -> m ()
+runEffect p = runPipe p *> pure ()
+
+||| Run an pure Effect in the Identity Monad
 export
 runPure : Effect Identity r -> r
-runPure = runIdentity . runEffect
+runPure = runIdentity . runPipe
 
 ||| Consuming a Source: summarize a set of values into a single output value
 export
@@ -159,19 +164,11 @@ each xs = foldr (\x, p => yield x *> p) (pure ()) xs
 
 export
 awaitOne : (Monad m) => (i -> PipeM i o r m r) -> PipeM i o r m r
-awaitOne f = do
-  x <- awaitOr
-  case x of
-    Left r => Pure r
-    Right x => f x
+awaitOne f = awaitOr >>= either Pure f
 
 export
 awaitForever : (Monad m) => (i -> PipeM i o r m ()) -> PipeM i o r m r
 awaitForever f = recur where
-  recur = do
-    x <- awaitOr
-    case x of
-      Left r => pure r
-      Right x => do f x; recur
+  recur = awaitOr >>= either Pure (\x => do f x; recur)
 
 --

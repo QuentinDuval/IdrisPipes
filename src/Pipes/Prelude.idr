@@ -51,21 +51,28 @@ concatMapping f = mapping f .| concatting
 filtering : (Monad m) => (a -> Bool) -> Pipe a m a
 filtering p = awaitForever $ \x => if p x then yield x else pure ()
 
-taking : (Monad m) => Nat -> PipeM a a r1 m ()
-taking Z = pure ()
-taking (S n) = await >>= maybe (pure ()) (\x => yield x *> taking n)
+taking : (Monad m) => Nat -> PipeM a a r m (Maybe r)
+taking = recur where
+  recur Z = pure Nothing
+  recur (S n) = do
+    x <- awaitOr
+    case x of
+      Left r => pure (Just r)
+      Right x => do yield x; taking n
 
 dropping : (Monad m) => Nat -> Pipe a m a
 dropping Z = idP
 dropping (S n) = awaitOne $ \x => dropping n
 
-takingWhile : (Monad m) => (a -> Bool) -> PipeM a a r1 m ()
+takingWhile : (Monad m) => (a -> Bool) -> PipeM a a r m (Maybe r)
 takingWhile p = recur where
   recur = do
-    mx <- await
+    mx <- awaitOr
     case mx of
-      Just x => if p x then yield x *> recur else pure ()
-      Nothing => pure ()
+      Left r => pure (Just r)
+      Right x => if p x
+        then do yield x; recur
+        else pure Nothing
 
 droppingWhile : (Monad m) => (a -> Bool) -> Pipe a m a
 droppingWhile p = recur where
