@@ -41,7 +41,12 @@ test_concatMapping = do
 
 test_grouping : Test
 test_grouping = do
-  assertEq [2, 4, 6, 8, 10] $ runPure $ each [1..5] .| repeating 2 .| grouping .| mapping sum .| consuming
+  assertEq [2, 4, 6, 8, 10] $
+    runPure (each [1..5] .| repeating 2 .| grouping .| mapping sum .| consuming)
+
+test_chunking : Test
+test_chunking = do
+  assertEq [[1, 2], [3, 4], [5]] $ runPure (each [1..5] .| chunking 2 .| consuming)
 
 
 --------------------------------------------------------------------------------
@@ -63,6 +68,7 @@ run_tests = runTestSuite
     , test_replicating_deduplicating
     , test_concatMapping
     , test_grouping
+    , test_chunking
     ]
 
 --

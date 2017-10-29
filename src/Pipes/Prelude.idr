@@ -91,6 +91,9 @@ deduplicating = recur (the (a -> Bool) (const True)) where
 repeating : (Monad m) => Nat -> Pipe a m a
 repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
 
+tracing : (Monad m) => (a -> m ()) -> Pipe a m a
+tracing trace = mappingM (\x => trace x *> pure x)
+
 groupingBy : (Monad m) => (a -> a -> Bool) -> Pipe a m (List a)
 groupingBy sameGroup = recur (the (List a) []) where
   recur xs = do
@@ -112,8 +115,16 @@ groupingBy sameGroup = recur (the (List a) []) where
 grouping : (Monad m, Eq a) => Pipe a m (List a)
 grouping = groupingBy (==)
 
-tracing : (Monad m) => (a -> m ()) -> Pipe a m a
-tracing trace = mappingM (\x => trace x *> pure x)
+chunking : (Monad m) => (n: Nat) -> {auto prf: GTE n 0} -> Pipe a m (List a)
+chunking chunkSize = recur (the (List a) []) chunkSize where
+  recur xs Z = do
+    yield (reverse xs)
+    recur [] chunkSize
+  recur xs (S n) = do
+    x <- awaitOr
+    case x of
+      Left r => do yield (reverse xs); pure r
+      Right x => recur (x :: xs) n
 
 
 -- Helper functions to construct Sinks more easily
