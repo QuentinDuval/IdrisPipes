@@ -29,7 +29,7 @@ The following code creates a `Source` of `Int`, keeping only the even number and
 
 We can interleave effects inside the computation in the pipe, for instance:
 
-    runEffect $ each [1..10] .| mappingM (\x => printLn x *> pure x) .| fold (+) 0
+    runPipe $ each [1..10] .| tracing printLn .| fold (+) 0
     > 1   -- Print the first number going through the pipe
     > ...
     > 10  -- Print the last number going through the pipe
@@ -37,8 +37,8 @@ We can interleave effects inside the computation in the pipe, for instance:
 
 The pipe itself is lazy and pull-based. The downstream consumption will drive it. If we do not consume entirely, only those effects that are needed to reach this stage of the computation will be triggered and made visible:
 
-    runEffect $ each [1..10] .| mappingM (\x => printLn x *> pure x) .| takingWhile (<5) .| fold (+) 0
+    runPipe $ each [1..10] .| tracing printLn .| takingWhile (< 5) .| fold (+) 0
     > 1   -- Print the first number going through the pipe
     > ...
-    > 5   -- Print the last number going through the pipe
+    > 5   -- Print the last number going through the pipe (not taking in the sum)
     > 10  -- The result of the computation = 1 + .. + 4
