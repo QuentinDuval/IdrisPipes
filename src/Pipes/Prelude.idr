@@ -57,11 +57,7 @@ taking (S n) = await >>= maybe (pure ()) (\x => yield x *> taking n)
 
 dropping : (Monad m) => Nat -> Pipe a m a
 dropping Z = idP
-dropping (S n) = do
-  mx <- awaitOr
-  case mx of
-    Left r => pure r
-    Right x => dropping n
+dropping (S n) = awaitOne $ \x => dropping n
 
 takingWhile : (Monad m) => (a -> Bool) -> PipeM a a r1 m ()
 takingWhile p = recur where
@@ -73,21 +69,17 @@ takingWhile p = recur where
 
 droppingWhile : (Monad m) => (a -> Bool) -> Pipe a m a
 droppingWhile p = recur where
-  recur = do
-    mx <- awaitOr
-    case mx of
-      Left r => pure r
-      Right x => if p x then recur else yield x *> idP
+  recur = awaitOne $ \x =>
+    if p x
+      then recur
+      else do yield x; idP
 
 deduplicating : (Eq a, Monad m) => Pipe a m a
 deduplicating = recur (the (a -> Bool) (const True)) where
-  recur isDifferent = do
-    mx <- awaitOr
-    case mx of
-      Left r => pure r
-      Right x => do
-        when (isDifferent x) (yield x)
-        recur (/= x)
+  recur isDifferent =
+    awaitOne $ \x => do
+      when (isDifferent x) (yield x)
+      recur (/= x)
 
 repeating : (Monad m) => Nat -> Pipe a m a
 repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))

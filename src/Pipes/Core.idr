@@ -157,6 +157,14 @@ each : (Monad m, Foldable f) => f a -> Source a m ()
 each xs = foldr (\x, p => yield x *> p) (pure ()) xs
 
 export
+awaitOne : (Monad m) => (i -> PipeM i o r m r) -> PipeM i o r m r
+awaitOne f = do
+  x <- awaitOr
+  case x of
+    Left r => Pure r
+    Right x => f x
+
+export
 awaitForever : (Monad m) => (i -> PipeM i o r m ()) -> PipeM i o r m r
 awaitForever f = recur where
   recur = do
