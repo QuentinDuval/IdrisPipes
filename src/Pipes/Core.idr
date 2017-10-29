@@ -9,7 +9,8 @@ import public Control.Monad.Trans
 ||| * `a` is the type flowing in from the upstream
 ||| * `b` is the type flowing out to downstream
 ||| * `m` is the Monad the pipe runs in
-||| * `r` is the returned value at pipe termination
+||| * `r2` is the returned value of the pipe
+||| * `r1` is the returned value of the previous pipe
 
 export
 data PipeM : (a, b, r1 : Type) -> (m : Type -> Type) -> (r2 : Type) -> Type where
