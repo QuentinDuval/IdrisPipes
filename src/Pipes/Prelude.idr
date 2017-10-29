@@ -3,27 +3,27 @@ module Pipes.Prelude
 import Control.Monad.Trans
 import Pipes.Core
 
-%access public export
+%access export
 
 -- Helper functions to construct Sources more easily
 -- * `stdinLn` lifts the standard output to a Source
 -- * `iterating` creates an infinite series of value f(f(f(f(...))))
 -- * `unfolding` creates a possibly infinite series of value from a seed
 
-stdinLn : String -> Source IO String
+stdinLn : String -> Source String IO ()
 stdinLn promptLine = recur where
   recur = do
     lift (putStr promptLine)
     lift getLine >>= yield
     recur
 
-iterating : (Monad m) => (a -> a) -> a -> Source m a
+iterating : (Monad m) => (a -> a) -> a -> Source a m ()
 iterating f = recur where
   recur a = do
     yield a
     recur (f a)
 
-unfolding : (Monad m) => (seed -> Maybe (a, seed)) -> seed -> Source m a
+unfolding : (Monad m) => (seed -> Maybe (a, seed)) -> seed -> Source a m ()
 unfolding f = recur . f where
   recur Nothing = pure ()
   recur (Just (a, seed)) = do
@@ -51,19 +51,19 @@ concatMapping f = mapping f .| concatting
 filtering : (Monad m) => (a -> Bool) -> Pipe a m a
 filtering p = awaitForever $ \x => if p x then yield x else pure ()
 
-taking : (Monad m) => Nat -> Pipe a m a
+taking : (Monad m) => Nat -> PipeM a a r1 m ()
 taking Z = pure ()
 taking (S n) = await >>= maybe (pure ()) (\x => yield x *> taking n)
 
 dropping : (Monad m) => Nat -> Pipe a m a
 dropping Z = idP
 dropping (S n) = do
-  mx <- await
+  mx <- awaitOr
   case mx of
-    Just x => dropping n
-    Nothing => pure ()
+    Left r => pure r
+    Right x => dropping n
 
-takingWhile : (Monad m) => (a -> Bool) -> Pipe a m a
+takingWhile : (Monad m) => (a -> Bool) -> PipeM a a r1 m ()
 takingWhile p = recur where
   recur = do
     mx <- await
@@ -74,20 +74,20 @@ takingWhile p = recur where
 droppingWhile : (Monad m) => (a -> Bool) -> Pipe a m a
 droppingWhile p = recur where
   recur = do
-    mx <- await
+    mx <- awaitOr
     case mx of
-      Just x => if p x then recur else yield x *> idP
-      Nothing => pure ()
+      Left r => pure r
+      Right x => if p x then recur else yield x *> idP
 
 deduplicating : (Eq a, Monad m) => Pipe a m a
 deduplicating = recur (the (a -> Bool) (const True)) where
   recur isDifferent = do
-    mx <- await
+    mx <- awaitOr
     case mx of
-      Just x => do
+      Left r => pure r
+      Right x => do
         when (isDifferent x) (yield x)
         recur (/= x)
-      Nothing => pure ()
 
 repeating : (Monad m) => Nat -> Pipe a m a
 repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
@@ -95,10 +95,12 @@ repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
 groupingBy : (Monad m) => (a -> a -> Bool) -> Pipe a m (List a)
 groupingBy sameGroup = recur (the (List a) []) where
   recur xs = do
-    mx <- await
+    mx <- awaitOr
     case mx of
-      Nothing => when (length xs > 0) (yield (reverse xs))
-      Just y => do
+      Left r => do
+        when (length xs > 0) (yield (reverse xs))
+        pure r
+      Right y => do
         case xs of
           [] => recur [y]
           (x::_) =>
@@ -119,11 +121,11 @@ tracing trace = mappingM (\x => trace x *> pure x)
 -- * `stdoutLn` lifts the standard output to a Sink
 -- * `discard` consumes all outputs and ignore them
 
-stdoutLn : Sink String IO ()
-stdoutLn = awaitForever $ \x => lift (putStrLn x)
-
-discard : (Monad m) => Sink a m ()
+discard : (Monad m) => SinkM a m r r
 discard = awaitForever $ \_ => pure ()
+
+stdoutLn : SinkM String IO r r
+stdoutLn = tracing putStrLn .| discard
 
 summing : (Monad m, Num a) => Sink a m a
 summing = fold (+) 0
