@@ -37,8 +37,13 @@ awaitOr = Await Pure
 
 ||| A `Source` cannot `await` any input
 public export
-Source : (b: Type) -> (m: Type -> Type) -> (r: Type) -> Type
-Source b m r = PipeM Void b Void m r
+Source : (m: Type -> Type) -> (b: Type) -> Type
+Source m b = PipeM Void b Void m ()
+
+||| A `Source` that can return a result of type `r`
+public export
+SourceM : (b: Type) -> (m: Type -> Type) -> (r: Type) -> Type
+SourceM b m r = PipeM Void b Void m r
 
 ||| A `Pipe` can `await` and `yield`
 public export
@@ -47,12 +52,13 @@ Pipe {r} a m b = PipeM a b r m r
 
 ||| A `Sink` cannot `yield` anything
 public export
+Sink : {r1: Type} -> (a: Type) -> (m: Type -> Type) -> (r: Type) -> Type
+Sink {r1} a m r = PipeM a Void r1 m r
+
+||| A `Sink` with access to the previous pipe return value
+public export
 SinkM : (a: Type) -> (m: Type -> Type) -> (r1, r2: Type) -> Type
 SinkM a m r1 r2 = PipeM a Void r1 m r2
-
-public export
-Sink : {r1: Type} -> (a: Type) -> (m: Type -> Type) -> (r: Type) -> Type
-Sink {r1} a m r = SinkM a m r1 r
 
 ||| An `Effect` cannot `await` or `yield` (pure effect)
 public export
@@ -159,7 +165,7 @@ idP : (Monad m) => Pipe a m a
 idP = Await (either Pure (Yield idP))
 
 export
-each : (Monad m, Foldable f) => f a -> Source a m ()
+each : (Monad m, Foldable f) => f a -> Source m a
 each xs = foldr (\x, p => yield x *> p) (pure ()) xs
 
 export
