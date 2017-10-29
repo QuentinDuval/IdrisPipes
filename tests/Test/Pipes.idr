@@ -46,7 +46,13 @@ test_grouping = do
 
 test_chunking : Test
 test_chunking = do
-  assertEq [[1, 2], [3, 4], [5]] $ runPure (each [1..5] .| chunking 2 .| consuming)
+  assertEq [[1, 2], [3, 4], [5]] $
+    runPure (each [1..5] .| chunking 2 .| consuming)
+
+test_splitting : Test
+test_splitting = do
+  assertEq [[1], [3], [5]] $
+    runPure (each [1..5] .| splittingBy even .| consuming)
 
 
 --------------------------------------------------------------------------------
@@ -69,6 +75,7 @@ run_tests = runTestSuite
     , test_concatMapping
     , test_grouping
     , test_chunking
+    , test_splitting
     ]
 
 --

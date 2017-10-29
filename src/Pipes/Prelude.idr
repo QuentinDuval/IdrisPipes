@@ -126,6 +126,16 @@ chunking chunkSize = recur (the (List a) []) chunkSize where
       Left r => do yield (reverse xs); pure r
       Right x => recur (x :: xs) n
 
+splittingBy : (Monad m) => (a -> Bool) -> Pipe a m (List a)
+splittingBy p = recur (the (List a) []) where
+  recur xs = do
+    x <- awaitOr
+    case x of
+      Left r => do yield (reverse xs); pure r
+      Right x => if p x
+        then do yield (reverse xs); recur []
+        else recur (x :: xs)
+
 
 -- Helper functions to construct Sinks more easily
 -- * `stdoutLn` lifts the standard output to a Sink
