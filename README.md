@@ -40,5 +40,5 @@ The pipe itself is lazy and pull-based. The downstream consumption will drive it
     runPipe $ each [1..10] .| tracing printLn .| takingWhile (< 5) .| fold (+) 0
     > 1   -- Print the first number going through the pipe
     > ...
-    > 5   -- Print the last number going through the pipe (not taking in the sum)
+    > 5   -- Print the last number going through the pipe (not taken in the sum)
     > 10  -- The result of the computation = 1 + .. + 4
