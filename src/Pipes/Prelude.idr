@@ -91,7 +91,7 @@ deduplicating = recur (the (a -> Bool) (const True)) where
 repeating : (Monad m) => Nat -> Pipe a m a
 repeating n = awaitForever $ \x => sequence_ (replicate n (yield x))
 
-tracing : (Monad m) => (a -> m ()) -> Pipe a m a
+tracing : (Monad m) => (a -> m b) -> Pipe a m a
 tracing trace = mappingM (\x => trace x *> pure x)
 
 groupingBy : (Monad m) => (a -> a -> Bool) -> Pipe a m (List a)
