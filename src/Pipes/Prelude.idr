@@ -43,7 +43,7 @@ mappingM : (Monad m) => (a -> m b) -> Pipe a m b
 mappingM f = awaitForever $ \x => lift (f x) >>= yield
 
 concatting : (Monad m, Foldable f) => Pipe (f a) m a
-concatting = awaitForever $ foldr (\x, p => yield x *> p) (pure ())
+concatting = awaitForever each
 
 concatMapping : (Monad m, Foldable f) => (a -> f b) -> Pipe a m b
 concatMapping f = mapping f .| concatting
