@@ -1,5 +1,6 @@
 module Test.Pipes
 
+import Control.Monad.Writer
 import Pipes
 import Test.Utils
 
@@ -64,7 +65,10 @@ test_replicating_scanning = do
 -- Effectful pipes
 --------------------------------------------------------------------------------
 
-
+test_tracing : Test
+test_tracing = do
+  (a, w) <- runWriterT $ runPipe (each [1..10] .| tracing (tell . show) .| discard)
+  assertEq "12345678910" w
 
 
 --------------------------------------------------------------------------------
@@ -82,6 +86,7 @@ run_tests = runTestSuite
     , test_chunking
     , test_splitting
     , test_replicating_scanning
+    , test_tracing
     ]
 
 --
