@@ -116,15 +116,15 @@ grouping : (Monad m, Eq a) => Pipe a m (List a)
 grouping = groupingBy (==)
 
 chunking : (Monad m) => (n: Nat) -> {auto prf: GTE n 0} -> Pipe a m (List a)
-chunking chunkSize = recur (the (List a) []) chunkSize where
-  recur xs Z = do
-    yield (reverse xs)
-    recur [] chunkSize
-  recur xs (S n) = do
+chunking chunkSize = recur (the (List a -> List a) id) chunkSize where
+  recur diffList Z = do
+    yield (diffList [])
+    recur id chunkSize
+  recur diffList (S n) = do
     x <- awaitOr
     case x of
-      Left r => do yield (reverse xs); pure r
-      Right x => recur (x :: xs) n
+      Left r => do yield (diffList []); pure r
+      Right x => recur (diffList . (x ::)) n
 
 splittingBy : (Monad m) => (a -> Bool) -> Pipe a m (List a)
 splittingBy p = recur (the (List a) []) where
@@ -158,7 +158,7 @@ consuming = recur (the (List a -> List a) id) where
   recur diffList = do
     mx <- await
     case mx of
-      Just x => recur (diffList . \l => x :: l)
+      Just x => recur (diffList . (x ::))
       Nothing => pure (diffList [])
 
 --
