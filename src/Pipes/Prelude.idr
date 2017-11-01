@@ -30,6 +30,11 @@ unfolding f = recur . f where
     yield a
     recur (f seed)
 
+replicating : (Monad m) => Nat -> a -> Source m a
+replicating times x = recur times where
+  recur Z = pure ()
+  recur (S n) = do yield x; recur n
+
 -- Helper functions to construct pipes more easily
 -- * `mapping` lifts a function as a pipe transformation
 -- * `filtering` lifts a predicate into a pipe filter
@@ -50,6 +55,9 @@ concatMapping f = mapping f .| concatting
 
 filtering : (Monad m) => (a -> Bool) -> Pipe a m a
 filtering p = awaitForever $ \x => if p x then yield x else pure ()
+
+filteringJust : (Monad m) => Pipe (Maybe a) m a
+filteringJust = awaitForever $ maybe (pure ()) yield
 
 taking : (Monad m) => Nat -> PipeM a a r m (Maybe r)
 taking = recur where
@@ -135,6 +143,16 @@ splittingBy p = recur (the (List a) []) where
       Right x => if p x
         then do yield (reverse xs); recur []
         else recur (x :: xs)
+
+scanning : (Monad m) => (a -> b -> b) -> b -> Pipe a m b
+scanning f initial = do
+    yield initial
+    recur initial
+  where
+    recur acc = awaitOne $ \x => do
+      let acc' = f x acc
+      yield acc'
+      recur acc'
 
 
 -- Helper functions to construct Sinks more easily

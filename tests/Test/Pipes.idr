@@ -3,7 +3,7 @@ module Test.Pipes
 import Pipes
 import Test.Utils
 
-%access public export
+%access export
 
 
 --------------------------------------------------------------------------------
@@ -30,8 +30,8 @@ test_unfolding_drop = do
   assertEq 55 $ runPure $ source .| dropping 10 .| taking 10 .| summing
   assertEq 55 $ runPure $ source .| droppingWhile (< 1) .| taking 10 .| summing
 
-test_replicating_deduplicating : Test
-test_replicating_deduplicating = do
+test_repeating_deduplicating : Test
+test_repeating_deduplicating = do
   assertEq 110 $ runPure $ each [1..10] .| repeating 2 .| summing
   assertEq 55 $ runPure $ each [1..10] .| repeating 2 .| deduplicating .| summing
 
@@ -54,6 +54,11 @@ test_splitting = do
   assertEq [[1], [3], [5]] $
     runPure (each [1..5] .| splittingBy even .| consuming)
 
+test_replicating_scanning : Test
+test_replicating_scanning = do
+  assertEq [0..10] $
+    runPure (replicating 10 1 .| scanning (+) 0 .| consuming)
+
 
 --------------------------------------------------------------------------------
 -- Effectful pipes
@@ -71,11 +76,12 @@ run_tests = runTestSuite
     [ test_filtering_mapping
     , test_iterating_take
     , test_unfolding_drop
-    , test_replicating_deduplicating
+    , test_repeating_deduplicating
     , test_concatMapping
     , test_grouping
     , test_chunking
     , test_splitting
+    , test_replicating_scanning
     ]
 
 --
