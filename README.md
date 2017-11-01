@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/QuentinDuval/IdrisPipes.svg?branch=master)](https://travis-ci.org/QuentinDuval/IdrisPipes)
 
+<br>
+
 ## Goal
 
 The goal of this package is to provide Idris with a library for composable and effectful production, transformation and consumption of streams of data. IdrisPipes aims at providing the means to write:
@@ -15,6 +17,8 @@ IdrisPipes is inspired by the work done in the Haskell community and in particul
 
 * https://hackage.haskell.org/package/pipes
 * https://hackage.haskell.org/package/conduit
+
+<br>
 
 ## Examples
 
@@ -53,6 +57,11 @@ The pipe follows pull-based streaming model. The downstream consumption will dri
     > 5   -- Print the last number going through the pipe (not taken in the sum)
     > 10  -- The result of the computation = 1 + .. + 4
 
+<br>
+
 ## Documentation & Resources
 
 You can find some more information on this library on my blog.
+
+<br>
+
