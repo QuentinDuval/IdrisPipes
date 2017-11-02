@@ -75,7 +75,9 @@ The Makefile also contains some more targets that you may find useful:
 
 ## Documentation & Resources
 
-You can find some more information on this library on my blog.
+You can find some more information on this library on my blog:
+
+* https://deque.blog/2017/11/02/idrispipes-a-library-for-composable-and-effectful-stream-processing-in-idris/
 
 <br>
 
