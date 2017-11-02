@@ -59,6 +59,20 @@ The pipe follows pull-based streaming model. The downstream consumption will dri
 
 <br>
 
+## Installing the package
+
+You can install IdrisPipes by using the following `make` command:
+
+    make install
+
+The Makefile also contains some more targets that you may find useful:
+
+    make build -- Build the library
+    make test  -- Run the test suite
+    make tuto  -- Run a REPL on the tutorial
+
+<br>
+
 ## Documentation & Resources
 
 You can find some more information on this library on my blog.
