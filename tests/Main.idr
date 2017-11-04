@@ -1,7 +1,7 @@
 module Main
 
-import Test.Tutorial
+import Test.Pipes
 
 export
 main : IO ()
-main = run_tutotial
+main = run_tests
