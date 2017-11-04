@@ -113,27 +113,28 @@ export
 implementation MonadTrans (PipeM a b r1) where
   lift m = assert_total $ Action (m >>= \x => pure (Pure x))
 
-infixl 9 .|
-infixr 9 >~
+infixr 9 .|
 
-mutual
+||| Assembling pipes: Pull based behavior
+||| * Run the actions of the right pipe until it reaches `await`
+||| * The run the actions of the left pipe until it reached `yield`
 
-  ||| Assembling pipes: Pull based behavior
-  ||| * Run the actions of the right pipe until it reaches `await`
-  ||| * The run the actions of the left pipe until it reached `yield`
+export
+(.|) : (Monad m) => PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
+(.|) = pull where
+  mutual
 
-  export
-  (.|) : (Monad m) => PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
-  (.|) up (Yield next c) = Yield (up .| next) c             -- Yielding downstream
-  (.|) up (Action a) = lift a >>= \next => up .| next       -- Produce effect downstream
-  (.|) up (Await cont) = up >~ cont                         -- Ask upstream for a value
-  (.|) up (Pure r) = Pure r
+    pull : (Monad m) => PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
+    pull up (Yield next c) = Yield (up `pull` next) c         -- Yielding downstream
+    pull up (Action a) = lift a >>= \next => up `pull` next   -- Produce effect downstream
+    pull up (Await cont) = up `push` cont                     -- Ask upstream for a value
+    pull up (Pure r) = Pure r
 
-  (>~) : (Monad m) => PipeM a b r1 m r2 -> (Either r2 b -> PipeM b c r2 m r3) -> PipeM a c r1 m r3
-  (>~) (Await cont) down = Await (\a => cont a >~ down)     -- Awaiting upstream
-  (>~) (Action a) down = lift a >>= \next => next >~ down   -- Produce effect upstream
-  (>~) (Yield next b) down = next .| down (Right b)          -- Give control downstream
-  (>~) (Pure r) down = Pure r .| down (Left r)               -- Termination, send Nothing to next
+    push : (Monad m) => PipeM a b r1 m r2 -> (Either r2 b -> PipeM b c r2 m r3) -> PipeM a c r1 m r3
+    push (Await cont) down = Await (\a => cont a `push` down)   -- Awaiting upstream
+    push (Action a) down = lift a >>= \next => next `push` down -- Produce effect upstream
+    push (Yield next b) down = next `pull` down (Right b)       -- Give control downstream
+    push (Pure r) down = Pure r `pull` down (Left r)            -- Termination, send Nothing to next
 
 
 ||| Run an Effect and collect the output
