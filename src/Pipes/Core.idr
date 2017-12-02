@@ -15,14 +15,21 @@ export
 data PipeM : (a, b, r1 : Type) -> (m : Type -> Type) -> (r2 : Type) -> Type where
   Pure    : r2 -> PipeM a b r1 m r2                                       -- Lift a value into the pipe
   Action  : m (Inf (PipeM a b r1 m r2)) -> PipeM a b r1 m r2              -- Interleave an effect
-  Yield   : Inf (PipeM a b r1 m r2) -> b -> PipeM a b r1 m r2             -- Yield a value and next status
+  Yield   : Inf (PipeM a b r1 m r2) -> m () -> b -> PipeM a b r1 m r2     -- Yield a value and next status
   Await   : (Either r1 a -> Inf (PipeM a b r1 m r2)) -> PipeM a b r1 m r2 -- Yield a continuation (expecting a value)
 
 ||| `yield` sends a value downstream
 
 export
-yield : b -> PipeM a b r' m ()
-yield = Yield (Pure ())
+yield : (Monad m) => b -> PipeM a b r' m ()
+yield = Yield (Pure ()) (pure ())
+
+||| `finalizeOr` sends a value downstream, or
+||| run the finalizer if the downstream pipe is termination
+
+export
+yieldOr : (Monad m) => b -> m () -> PipeM a b r' m ()
+yieldOr value finalize = Yield (Pure ()) finalize value
 
 ||| `await` waits from an upstream value
 
@@ -81,7 +88,7 @@ implementation (Monad m) => Functor (PipeM a b r1 m) where
   map f = assert_total recur where
     recur (Pure r) = Pure (f r)
     recur (Action a) = Action (a >>= \x => pure (recur x))
-    recur (Yield next b) = Yield (recur next) b
+    recur (Yield next finish b) = Yield (recur next) finish b
     recur (Await cont) = Await (\x => recur (cont x))
 
 ||| Applicative implementation (Recursively replace `r` with `map r pa`)
@@ -92,7 +99,7 @@ implementation (Monad m) => Applicative (PipeM a b r1 m) where
   pf <*> pa = assert_total (recur pf) where
     recur (Pure f) = map f pa
     recur (Action a) = Action (a >>= \x => pure (recur x))
-    recur (Yield next b) = Yield (recur next) b
+    recur (Yield next finish b) = Yield (recur next) finish b
     recur (Await cont) = Await (\x => recur (cont x))
 
 ||| Monad implementation (Recursively replace `r` with `f r`)
@@ -102,7 +109,7 @@ implementation (Monad m) => Monad (PipeM a b r1 m) where
   m >>= f = assert_total (recur m) where
     recur (Pure r) = f r
     recur (Action a) = Action (a >>= \x => pure (recur x))
-    recur (Yield next b) = Yield (recur next) b
+    recur (Yield next finish b) = Yield (recur next) finish b
     recur (Await cont) = Await (\x => recur (cont x))
 
 ||| Monad Transformer implementation
@@ -121,20 +128,29 @@ infixr 9 .|
 
 export
 (.|) : (Monad m) => PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
-(.|) = pull where
+(.|) = pull (pure ()) where
   mutual
 
-    pull : (Monad m) => PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
-    pull up (Yield next c) = Yield (up `pull` next) c         -- Yielding downstream
-    pull up (Action a) = lift a >>= \next => up `pull` next   -- Produce effect downstream
-    pull up (Await cont) = up `push` \x => cont x             -- Ask upstream for a value
-    pull up (Pure r) = Pure r
+    pull : (Monad m) => m () -> PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
+    pull final up (Yield next finish c) =
+      let final' = do finish; final
+      in Yield (pull final up next) final' c      -- Yielding downstream
+    pull final up (Action a) =
+      lift a >>= \next => pull final up next      -- Produce effect downstream
+    pull final up (Await cont) =
+      up `push` \x => cont x                      -- Ask upstream for a value
+    pull final up (Pure r) =
+      do lift final; Pure r
 
     push : (Monad m) => PipeM a b r1 m r2 -> (Either r2 b -> PipeM b c r2 m r3) -> PipeM a c r1 m r3
-    push (Await cont) down = Await (\a => cont a `push` down)   -- Awaiting upstream
-    push (Action a) down = lift a >>= \next => next `push` down -- Produce effect upstream
-    push (Yield next b) down = next `pull` down (Right b)       -- Give control downstream
-    push (Pure r) down = Pure r `pull` down (Left r)            -- Termination, send Nothing to next
+    push (Await cont) down =
+      Await (\a => cont a `push` down)            -- Awaiting upstream
+    push (Action a) down =
+      lift a >>= \next => next `push` down        -- Produce effect upstream
+    push (Yield next finish b) down =
+      pull finish next (down (Right b))           -- Give control downstream
+    push (Pure r) down =
+      pull (pure ()) (Pure r) (down (Left r))     -- Termination, send Nothing to next
 
 
 ||| Run an Effect and collect the output
@@ -145,7 +161,7 @@ export
 runPipe : (Monad m) => Effect m r -> m r
 runPipe (Pure r) = pure r                         -- Done executing the pipe, return the result
 runPipe (Action a) = a >>= \p => runPipe p        -- Execute the action, run the next of the pipe
-runPipe (Yield next b) = absurd b
+runPipe (Yield next finish b) = absurd b
 runPipe (Await cont) = runPipe $ Await (either absurd absurd)
 
 ||| Run an Effect and discard the output
@@ -180,7 +196,7 @@ fold f = foldM (\a, b => pure (f a b))
 
 export
 idP : (Monad m) => Pipe a m a
-idP = awaitOr >>= either Pure (Yield idP)
+idP = awaitOr >>= either Pure (Yield idP (pure ()))
 
 ||| The function `each` lifts a foldable to a Source
 ||| * The actual type is in fact more general

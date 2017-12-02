@@ -17,6 +17,23 @@ stdinLn promptLine = recur where
     lift getLine >>= yield
     recur
 
+streamFile : File -> Source IO (Either FileError String)
+streamFile f = recur f where
+  recur f = do
+    end <- lift (fEOF f)
+    if end
+      then lift (closeFile f)
+      else do
+        l <- lift (fGetLine f)
+        yieldOr l (closeFile f)
+        recur f
+
+readFile : String -> Source IO (Either FileError String)
+readFile fileName = do
+  Right f <- lift (openFile fileName Read)
+    | Left err => yield (Left err)
+  streamFile f
+
 iterating : (Monad m) => (a -> a) -> a -> Source m a
 iterating f = recur where
   recur a = do

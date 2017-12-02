@@ -70,6 +70,14 @@ test_tracing = do
   (a, w) <- runWriterT $ runPipe (each [1..10] .| tracing (tell . show) .| discard)
   assertEq "12345678910" w
 
+rightOr : r -> Either l r -> r
+rightOr r (Left _) = r
+rightOr _ (Right r) = r
+
+test_reading_file : Test
+test_reading_file = do
+  r <- runPipe (readFile "./Test/test.txt" .| mapping (rightOr "") .| consuming)
+  assertEq "123\n45678\n9\n" (concat r)
 
 --------------------------------------------------------------------------------
 -- All tests
@@ -87,6 +95,7 @@ run_tests = runTestSuite
     , test_splitting
     , test_replicating_scanning
     , test_tracing
+    , test_reading_file
     ]
 
 --
