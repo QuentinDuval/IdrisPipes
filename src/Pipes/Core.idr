@@ -13,10 +13,10 @@ import public Control.Monad.Trans
 
 export
 data PipeM : (a, b, r1 : Type) -> (m : Type -> Type) -> (r2 : Type) -> Type where
-  Pure    : r2 -> PipeM a b r1 m r2                                 -- Lift a value into the pipe
-  Action  : m (Inf (PipeM a b r1 m r2)) -> PipeM a b r1 m r2        -- Interleave an effect
-  Yield   : Inf (PipeM a b r1 m r2) -> b -> PipeM a b r1 m r2       -- Yield a value and next status
-  Await   : (Either r1 a -> PipeM a b r1 m r2) -> PipeM a b r1 m r2 -- Yield a continuation (expecting a value)
+  Pure    : r2 -> PipeM a b r1 m r2                                       -- Lift a value into the pipe
+  Action  : m (Inf (PipeM a b r1 m r2)) -> PipeM a b r1 m r2              -- Interleave an effect
+  Yield   : Inf (PipeM a b r1 m r2) -> b -> PipeM a b r1 m r2             -- Yield a value and next status
+  Await   : (Either r1 a -> Inf (PipeM a b r1 m r2)) -> PipeM a b r1 m r2 -- Yield a continuation (expecting a value)
 
 ||| `yield` sends a value downstream
 
@@ -36,7 +36,7 @@ await = Await $ \v =>
 
 export
 awaitOr : PipeM a b r1 m (Either r1 a)
-awaitOr = Await Pure
+awaitOr = Await $ \v => Pure v
 
 ||| A `Source` cannot `await` any input
 
@@ -82,7 +82,7 @@ implementation (Monad m) => Functor (PipeM a b r1 m) where
     recur (Pure r) = Pure (f r)
     recur (Action a) = Action (a >>= \x => pure (recur x))
     recur (Yield next b) = Yield (recur next) b
-    recur (Await cont) = Await (recur . cont)
+    recur (Await cont) = Await (\x => recur (cont x))
 
 ||| Applicative implementation (Recursively replace `r` with `map r pa`)
 
@@ -93,7 +93,7 @@ implementation (Monad m) => Applicative (PipeM a b r1 m) where
     recur (Pure f) = map f pa
     recur (Action a) = Action (a >>= \x => pure (recur x))
     recur (Yield next b) = Yield (recur next) b
-    recur (Await cont) = Await (recur . cont)
+    recur (Await cont) = Await (\x => recur (cont x))
 
 ||| Monad implementation (Recursively replace `r` with `f r`)
 
@@ -103,7 +103,7 @@ implementation (Monad m) => Monad (PipeM a b r1 m) where
     recur (Pure r) = f r
     recur (Action a) = Action (a >>= \x => pure (recur x))
     recur (Yield next b) = Yield (recur next) b
-    recur (Await cont) = Await (recur . cont)
+    recur (Await cont) = Await (\x => recur (cont x))
 
 ||| Monad Transformer implementation
 ||| * Wrap the monadic action in a `Action` constructor
@@ -127,7 +127,7 @@ export
     pull : (Monad m) => PipeM a b r1 m r2 -> PipeM b c r2 m r3 -> PipeM a c r1 m r3
     pull up (Yield next c) = Yield (up `pull` next) c         -- Yielding downstream
     pull up (Action a) = lift a >>= \next => up `pull` next   -- Produce effect downstream
-    pull up (Await cont) = up `push` cont                     -- Ask upstream for a value
+    pull up (Await cont) = up `push` \x => cont x             -- Ask upstream for a value
     pull up (Pure r) = Pure r
 
     push : (Monad m) => PipeM a b r1 m r2 -> (Either r2 b -> PipeM b c r2 m r3) -> PipeM a c r1 m r3
@@ -180,7 +180,7 @@ fold f = foldM (\a, b => pure (f a b))
 
 export
 idP : (Monad m) => Pipe a m a
-idP = Await (either Pure (Yield idP))
+idP = awaitOr >>= either Pure (Yield idP)
 
 ||| The function `each` lifts a foldable to a Source
 ||| * The actual type is in fact more general
