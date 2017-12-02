@@ -79,6 +79,16 @@ test_reading_file = do
   r <- runPipe (readFile "./Test/test.txt" .| mapping (rightOr "") .| consuming)
   assertEq "123\n45678\n9\n" (concat r)
 
+earlyTerminating : MonadWriter String m => Source m String
+earlyTerminating = do
+  yieldOr "." (tell "done")
+  earlyTerminating
+
+test_early_termination : Test
+test_early_termination = do
+  (a, w) <- runWriterT $ runPipe (earlyTerminating .| taking 10 .| discard)
+  assertEq "done" w
+
 --------------------------------------------------------------------------------
 -- All tests
 --------------------------------------------------------------------------------
@@ -96,6 +106,7 @@ run_tests = runTestSuite
     , test_replicating_scanning
     , test_tracing
     , test_reading_file
+    , test_early_termination
     ]
 
 --
